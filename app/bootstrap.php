@@ -2297,7 +2297,7 @@ function portal_page_body_class(bool $presentationAssets): string
     return $presentationAssets ? 'presentation-page' : '';
 }
 
-function portal_render_page(string $title, string $content, ?array $user = null, bool $presentationAssets = false, string $bodyClassOverride = '', bool $siteFeedbackAssets = false): void
+function portal_render_page(string $title, string $content, ?array $user = null, bool $presentationAssets = false, string $bodyClassOverride = '', bool $siteFeedbackAssets = false, bool $htmlStudioAssets = false): void
 {
     $stylesheetPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'app.css';
     $stylesheetVersion = is_file($stylesheetPath) ? (string) filemtime($stylesheetPath) : '1';
@@ -2313,6 +2313,10 @@ function portal_render_page(string $title, string $content, ?array $user = null,
     $siteFeedbackStylesheetVersion = is_file($siteFeedbackStylesheetPath) ? (string) filemtime($siteFeedbackStylesheetPath) : '1';
     $siteFeedbackScriptVersion = is_file($siteFeedbackScriptPath) ? (string) filemtime($siteFeedbackScriptPath) : '1';
     $html2canvasVersion = is_file($html2canvasPath) ? (string) filemtime($html2canvasPath) : '1';
+    $htmlStudioStylesheetPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'html-studio.css';
+    $htmlStudioScriptPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'html-studio.js';
+    $htmlStudioStylesheetVersion = is_file($htmlStudioStylesheetPath) ? (string) filemtime($htmlStudioStylesheetPath) : '1';
+    $htmlStudioScriptVersion = is_file($htmlStudioScriptPath) ? (string) filemtime($htmlStudioScriptPath) : '1';
     $presentationStylesheetPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'presentation.css';
     $presentationScriptPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'presentation.js';
     $pptxRendererPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'assets' . DIRECTORY_SEPARATOR . 'pptx-renderer.js';
@@ -2335,6 +2339,7 @@ function portal_render_page(string $title, string $content, ?array $user = null,
         $navigation = '<nav class="site-nav" aria-label="主要導覽"><a href="' . portal_url('documents') . '">文件庫</a>';
         if (portal_is_admin($user)) {
             $navigation .= '<a href="' . portal_url('visual_assets') . '">AI 圖像／資訊圖表</a>'
+                . '<a href="' . portal_url('html_studio') . '">HTML 工作室</a>'
                 . '<a href="' . portal_url('admin') . '">管理後台</a>';
             $feedbackShortcut = '<a class="site-feedback-shortcut" href="' . portal_url('feedback') . '" aria-label="畫面修改需求" title="畫面修改需求"><span aria-hidden="true">✎</span></a>';
         }
@@ -2356,6 +2361,9 @@ function portal_render_page(string $title, string $content, ?array $user = null,
         . ($siteFeedbackAssets
             ? '<link rel="stylesheet" href="assets/site-feedback.css?v=' . portal_e($siteFeedbackStylesheetVersion) . '">'
             : '')
+        . ($htmlStudioAssets
+            ? '<link rel="stylesheet" href="assets/html-studio.css?v=' . portal_e($htmlStudioStylesheetVersion) . '">'
+            : '')
         . '</head><body' . ($bodyClass === '' ? '' : ' class="' . portal_e($bodyClass) . '"') . '>'
         . '<header class="site-header"><a class="brand" href="' . ($user === null ? portal_url('login') : portal_url('documents')) . '"><span>供水監測</span><small>文件協作平台</small></a>'
         . $navigation . $feedbackShortcut . $fontControl . $userArea . '</header>'
@@ -2373,6 +2381,9 @@ function portal_render_page(string $title, string $content, ?array $user = null,
             ? '<script src="assets/vendor/html2canvas/html2canvas.min.js?v=' . portal_e($html2canvasVersion) . '"></script>'
                 . '<script src="assets/site-feedback.js?v=' . portal_e($siteFeedbackScriptVersion) . '"></script>'
             : '')
+        . ($htmlStudioAssets
+            ? '<script src="assets/html-studio.js?v=' . portal_e($htmlStudioScriptVersion) . '"></script>'
+            : '')
         . '</body></html>';
 }
 
@@ -2384,3 +2395,4 @@ require_once __DIR__ . DIRECTORY_SEPARATOR . 'presentation_queue_trigger.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'staging.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'image_library.php';
 require_once __DIR__ . DIRECTORY_SEPARATOR . 'site_feedback.php';
+require_once __DIR__ . DIRECTORY_SEPARATOR . 'html_studio.php';

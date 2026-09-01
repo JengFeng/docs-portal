@@ -47,6 +47,7 @@ $allowedActions = [
     'image_review', 'image_asset', 'image_annotations_save', 'image_annotation_status', 'image_export',
     'image_requirement_revision_create', 'image_requirement_revision_status', 'image_requirement_revision_archive',
     'presentation_queue_internal',
+    'html_studio',
     'admin', 'admin_document', 'admin_sync', 'admin_bridge_settings', 'admin_user_create',
     'admin_user_update', 'admin_document_update', 'admin_documents_bulk_update',
     'staging', 'staging_workspace', 'staging_chunk', 'staging_finalize', 'staging_preview_asset', 'staging_confirm', 'staging_return',
@@ -332,6 +333,11 @@ try {
     }
     if ($action === 'image_export') {
         portal_handle_image_export($database, $config, $user);
+    }
+    if ($action === 'html_studio') {
+        $admin = portal_require_admin($database);
+        portal_render_html_studio($admin);
+        exit;
     }
     if ($action === 'admin') {
         $admin = portal_require_admin($database);
