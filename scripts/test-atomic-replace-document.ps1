@@ -19,7 +19,9 @@ try {
     $json=& powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File $helper -RelativePath $relative -CandidateName $candidateName -ExpectedHash $old -CandidateHash $new
     if($LASTEXITCODE-ne0){throw ('success path failed: '+($json -join ' '))}
     $result=$json|ConvertFrom-Json
-    if(-not$result.ok -or (Get-TestFileHash $target)-ne$new -or(Test-Path -LiteralPath $candidate)){throw 'success invariant failed'}
+    $backup=$candidate+'.backup'
+    if(-not$result.ok -or (Get-TestFileHash $target)-ne$new -or(Test-Path -LiteralPath $candidate)-or -not(Test-Path -LiteralPath $backup)-or(Get-TestFileHash $backup)-ne$old){throw 'success invariant failed'}
+    Remove-Item -LiteralPath $backup -Force
     $candidate2='.'+[Guid]::NewGuid().ToString()+'.replace.pdf'
     $path2=Join-Path $folder $candidate2
     [IO.File]::WriteAllText($path2,'third-bytes')

@@ -12,8 +12,9 @@ mutation_assert(function_exists('portal_render_document_mutation_actions'), 'per
 $document=['public_id'=>'11111111-1111-4111-8111-111111111111','relative_path'=>'folder/report.pdf','file_name'=>'report.pdf','extension'=>'pdf','content_hash'=>str_repeat('a',64),'status_code'=>'published'];
 $user=['user_id'=>7,'role_code'=>'reader'];
 $actions=portal_render_document_mutation_actions($document,$user);
-foreach(['檢視','編輯','封存','document_replace','document_archive'] as $needle) mutation_assert(str_contains($actions,$needle), 'row action missing: '.$needle);
-mutation_assert(str_contains($actions,'expected_hash'), 'archive must carry expected hash');
+mutation_assert($actions==='', 'dormant request must not render mutation actions');
+$mutationSource=(string)file_get_contents($root.'/app/document_mutations.php');
+foreach(['檢視','編輯','封存','document_replace','document_archive','expected_hash'] as $needle) mutation_assert(str_contains($mutationSource,$needle), 'row action contract missing: '.$needle);
 $bad=false;try{portal_validate_document_replacement_upload($document,['name'=>'renamed.pdf','tmp_name'=>'x','size'=>1,'error'=>UPLOAD_ERR_OK],false);}catch(Throwable){$bad=true;}
 mutation_assert($bad,'replacement must preserve exact name');
 $bad=false;try{portal_validate_document_replacement_upload($document,['name'=>'report.exe','tmp_name'=>'x','size'=>1,'error'=>UPLOAD_ERR_OK],false);}catch(Throwable){$bad=true;}

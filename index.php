@@ -32,6 +32,9 @@ try {
     exit;
 }
 
+// Evaluate env, exact schema/permissions, and fixed-root identity once.
+portal_document_mutations_request_enabled($database, $config);
+
 $action = (string) ($_GET['action'] ?? 'documents');
 $allowedActions = [
     'documents', 'visual_assets', 'login', 'google_login', 'google_callback', 'logout', 'view', 'download', 'inline',
@@ -222,7 +225,7 @@ try {
     }
     if ($action === 'document_restore') {
         $admin = portal_require_admin($database);
-        portal_handle_document_restore($database, $admin);
+        portal_handle_document_restore($database, $config, $admin);
         exit;
     }
     if ($action === 'view') {
@@ -530,14 +533,9 @@ function portal_handle_logout(PDO $database): void
     header('Location: ' . portal_url('login'), true, 303);
 }
 
-function portal_document_mutations_request_enabled(PDO $database): bool
-{
-    return getenv('PORTAL_DOCUMENT_MUTATIONS_ENABLED') === '1' && portal_document_mutation_schema_available($database);
-}
-
 function portal_render_document_replace_page(PDO $database, array $user, string $publicId): void
 {
-    if (!portal_document_mutations_request_enabled($database)) { http_response_code(404); portal_render_page('功能尚未啟用','<section class="panel narrow"><h1>功能尚未啟用</h1><p>安全文件替換仍在部署驗證階段。</p></section>',$user); return; }
+    if (!portal_document_mutations_request_enabled() || !portal_document_mutation_actor_allowed($user)) { http_response_code(404); portal_render_page('功能尚未啟用','<section class="panel narrow"><h1>功能尚未啟用</h1><p>安全文件替換仍在部署驗證階段。</p></section>',$user); return; }
     $document=portal_get_catalog_document($database,$user,$publicId);
     if ($document===null || (string)$document['status_code']==='archived') { http_response_code(404); portal_render_page('找不到文件','<section class="panel narrow"><h1>找不到文件</h1></section>',$user); return; }
     $content='<a class="back-link" href="'.portal_e(portal_url('view',['id'=>$publicId])).'">← 返回文件</a><section class="panel editor-panel document-replace-panel"><p class="eyebrow">SECURE REPLACEMENT</p><h1>安全替換 '.portal_e((string)$document['file_name']).'</h1><p>檔名、相對路徑與副檔名必須維持不變。目前內容會保留於不可變SQL版本歷程；單檔上限500 MiB。</p><form class="document-replace-form" method="post" enctype="multipart/form-data" action="'.portal_e(portal_url('document_replace_submit')).'">'.portal_csrf_field().'<input type="hidden" name="id" value="'.portal_e($publicId).'"><input type="hidden" name="expected_hash" value="'.portal_e((string)$document['content_hash']).'"><label>選擇替換檔案<input type="file" name="replacement" accept=".'.portal_e((string)$document['extension']).'" required></label><div class="form-actions"><a class="secondary-button" href="'.portal_e(portal_url('view',['id'=>$publicId])).'">取消</a><button class="primary-button" type="submit">安全替換並建立新版本</button></div></form></section>';
@@ -550,7 +548,7 @@ function portal_handle_document_replace_submit(PDO $database, array $config, arr
     $id=(string)($_POST['id']??'');
     try {
         portal_assert_csrf();
-        if (!portal_document_mutations_request_enabled($database)) throw new RuntimeException('功能尚未啟用。');
+        if (!portal_document_mutations_request_enabled() || !portal_document_mutation_actor_allowed($user)) throw new RuntimeException('功能尚未啟用。');
         $document=portal_get_catalog_document($database,$user,$id);
         if ($document===null || !hash_equals((string)$document['content_hash'],portal_document_version_hash((string)($_POST['expected_hash']??'')))) throw new RuntimeException('文件已變更。');
         portal_execute_document_replacement($database,$config,$document,$user,(array)($_FILES['replacement']??[]));
@@ -562,15 +560,15 @@ function portal_handle_document_replace_submit(PDO $database, array $config, arr
 function portal_handle_document_archive(PDO $database, array $user): void
 {
     if ($_SERVER['REQUEST_METHOD']!=='POST') { http_response_code(405); return; }
-    try { portal_assert_csrf(); if(!portal_document_mutations_request_enabled($database)) throw new RuntimeException('功能尚未啟用。'); $document=portal_get_catalog_document($database,$user,(string)($_POST['id']??'')); if($document===null) throw new RuntimeException('找不到文件。'); portal_soft_archive_document($database,$document,$user,(string)($_POST['expected_hash']??'')); portal_flash_set('success','文件已封存；實體檔案、版本內容與稽核均完整保留。'); }
+    try { portal_assert_csrf(); if(!portal_document_mutations_request_enabled() || !portal_document_mutation_actor_allowed($user)) throw new RuntimeException('功能尚未啟用。'); $document=portal_get_catalog_document($database,$user,(string)($_POST['id']??'')); if($document===null) throw new RuntimeException('找不到文件。'); portal_soft_archive_document($database,$document,$user,(string)($_POST['expected_hash']??'')); portal_flash_set('success','文件已封存；實體檔案、版本內容與稽核均完整保留。'); }
     catch(Throwable $exception) { error_log('TWWATER soft archive failed: '.$exception->getMessage()); portal_flash_set('error','封存未完成，請重新整理後再試。'); }
     header('Location: '.portal_url('documents'),true,303);
 }
 
-function portal_handle_document_restore(PDO $database, array $admin): void
+function portal_handle_document_restore(PDO $database, array $config, array $admin): void
 {
     if ($_SERVER['REQUEST_METHOD']!=='POST') { http_response_code(405); return; }
-    try { portal_assert_csrf(); if(!portal_document_mutations_request_enabled($database)) throw new RuntimeException('功能尚未啟用。'); $document=portal_get_catalog_document($database,$admin,(string)($_POST['id']??'')); if($document===null) throw new RuntimeException('找不到文件。'); portal_restore_archived_document($database,(int)$document['document_id'],$admin); portal_flash_set('success','文件已從軟封存恢復；實體檔案未曾移動。'); }
+    try { portal_assert_csrf(); if(!portal_document_mutations_request_enabled() || !portal_document_mutation_actor_allowed($admin)) throw new RuntimeException('功能尚未啟用。'); $document=portal_get_catalog_document($database,$admin,(string)($_POST['id']??'')); if($document===null) throw new RuntimeException('找不到文件。'); portal_restore_archived_document($database,$config,$document,$admin); portal_flash_set('success','文件已從軟封存恢復；實體檔案與不可變目前版本均已驗證。'); }
     catch(Throwable $exception) { error_log('TWWATER soft restore failed: '.$exception->getMessage()); portal_flash_set('error','只有由使用者軟封存且檔案仍存在的文件可恢復。'); }
     header('Location: '.portal_url('admin'),true,303);
 }
@@ -589,7 +587,7 @@ function portal_render_document_library(PDO $database, array $user): void
         . (portal_is_admin($user) ? '<a class="secondary-button" href="' . portal_url('admin') . '">管理後台</a>' : '') . '</div></section>';
     $content .= portal_render_view_tabs($filters);
     $content .= portal_render_library_filters($filters, $phases, $types);
-    $content .= portal_render_document_results($documents, $filters, portal_is_admin($user));
+    $content .= portal_render_document_results($documents, $filters, portal_is_admin($user), $user);
     portal_render_page('文件庫', $content, $user, false, 'document-library-page');
 }
 
@@ -771,10 +769,10 @@ function portal_document_has_role(array $document, string $stage, string $role):
     return false;
 }
 
-function portal_render_document_results(array $documents, array $filters, bool $isAdmin): string
+function portal_render_document_results(array $documents, array $filters, bool $isAdmin, array $user = []): string
 {
     if ($filters['view'] === 'directory') {
-        return portal_render_document_directory_tree($documents, $filters, $isAdmin);
+        return portal_render_document_directory_tree($documents, $filters, $isAdmin, $user);
     }
     $heading = $filters['view'] === 'stage' ? 'SSDLC 文件' : '依文件種類檢視';
     $singleStage = count($filters['stages']) === 1 ? $filters['stages'][0] : null;
@@ -789,24 +787,24 @@ function portal_render_document_results(array $documents, array $filters, bool $
     if ($filters['view'] === 'stage' && $singleStage !== null && count($filters['roles']) !== 1) {
         $inputs = array_values(array_filter($documents, static fn(array $document): bool => portal_document_has_role($document, $singleStage, 'input')));
         $outputs = array_values(array_filter($documents, static fn(array $document): bool => portal_document_has_role($document, $singleStage, 'output')));
-        $body .= portal_render_document_group('先備輸入文件', '本階段開始前應確認或承接的文件。', $inputs, $singleStage, $isAdmin);
-        $body .= portal_render_document_group('本階段產出文件', '完成本階段後可供後續階段使用的文件。', $outputs, $singleStage, $isAdmin);
+        $body .= portal_render_document_group('先備輸入文件', '本階段開始前應確認或承接的文件。', $inputs, $singleStage, $isAdmin, $user);
+        $body .= portal_render_document_group('本階段產出文件', '完成本階段後可供後續階段使用的文件。', $outputs, $singleStage, $isAdmin, $user);
     } else {
         foreach ($documents as $document) {
-            $body .= portal_render_document_row($document, $filters['view'] === 'stage' ? $singleStage : null, $isAdmin);
+            $body .= portal_render_document_row($document, $filters['view'] === 'stage' ? $singleStage : null, $isAdmin, $user);
         }
     }
     return '<section class="file-list panel"><div class="section-heading"><div><h2>' . $heading . '</h2><p>' . $description . '</p></div>' . $resultActions . '</div><div class="document-rows">' . $body . '</div></section>';
 }
 
-function portal_render_document_directory_node(array $node, bool $isAdmin, bool $isRoot = false): string
+function portal_render_document_directory_node(array $node, bool $isAdmin, bool $isRoot = false, array $user = []): string
 {
     $children = '';
     foreach ($node['directories'] as $child) {
-        $children .= portal_render_document_directory_node($child, $isAdmin);
+        $children .= portal_render_document_directory_node($child, $isAdmin, false, $user);
     }
     foreach ($node['documents'] as $document) {
-        $children .= portal_render_document_row($document, null, $isAdmin);
+        $children .= portal_render_document_row($document, null, $isAdmin, $user);
     }
     if ($children === '') {
         $children = '<p class="directory-empty-state">此目錄目前沒有可顯示的文件或子目錄。</p>';
@@ -817,18 +815,18 @@ function portal_render_document_directory_node(array $node, bool $isAdmin, bool 
     return '<details class="directory-node' . ($isRoot ? ' directory-root' : '') . '"' . ($isRoot ? ' open' : '') . ' data-directory-path="' . portal_e($path) . '"><summary><span class="directory-node-icon" aria-hidden="true"></span><span class="directory-node-label">' . portal_e($label) . '</span><small>' . portal_e($path) . '</small><b>' . $count . ' 個項目</b></summary><div class="directory-node-children">' . $children . '</div></details>';
 }
 
-function portal_render_document_directory_tree(array $documents, array $filters, bool $isAdmin): string
+function portal_render_document_directory_tree(array $documents, array $filters, bool $isAdmin, array $user = []): string
 {
     $tree = portal_build_document_directory_tree($documents);
     $actions = '<div class="library-result-actions"><span class="count-badge">' . count($documents) . ' 件</span>' . portal_render_library_sort_menu($filters) . '</div>';
-    return '<section class="file-list panel directory-view"><div class="section-heading"><div><h2>依網站目錄檢視</h2><p>由 / 根目錄開始，依文件的實際相對路徑逐層瀏覽；目錄可展開或收合。</p></div>' . $actions . '</div><div class="directory-tree">' . portal_render_document_directory_node($tree, $isAdmin, true) . '</div></section>';
+    return '<section class="file-list panel directory-view"><div class="section-heading"><div><h2>依網站目錄檢視</h2><p>由 / 根目錄開始，依文件的實際相對路徑逐層瀏覽；目錄可展開或收合。</p></div>' . $actions . '</div><div class="directory-tree">' . portal_render_document_directory_node($tree, $isAdmin, true, $user) . '</div></section>';
 }
 
-function portal_render_document_group(string $title, string $description, array $documents, string $stage, bool $isAdmin): string
+function portal_render_document_group(string $title, string $description, array $documents, string $stage, bool $isAdmin, array $user = []): string
 {
     $rows = '';
     foreach ($documents as $document) {
-        $rows .= portal_render_document_row($document, $stage, $isAdmin);
+        $rows .= portal_render_document_row($document, $stage, $isAdmin, $user);
     }
     if ($rows === '') {
         $rows = '<p class="group-empty-note">目前尚未列入對應文件；可由管理後台重新索引並補上中繼資料。</p>';
@@ -849,13 +847,12 @@ function portal_render_document_type_tags(array $document): string
     return $tags;
 }
 
-function portal_render_document_row(array $document, ?string $focusStage, bool $isAdmin): string
+function portal_render_document_row(array $document, ?string $focusStage, bool $isAdmin, array $user = []): string
 {
     $link = portal_url('view', ['id' => (string) $document['public_id']]);
     $status = $isAdmin ? '<span class="status-chip ' . portal_e((string) $document['status_code']) . '">' . portal_e((string) $document['status_code']) . '</span>' : '';
     $relativePath = (string) ($document['relative_path'] ?? '');
-    $mutationActions = getenv('PORTAL_DOCUMENT_MUTATIONS_ENABLED') === '1'
-        ? portal_render_document_mutation_actions($document, ['role_code'=>'reader']) : '';
+    $mutationActions = portal_render_document_mutation_actions($document, $user);
     return '<article class="document-row"><span class="file-icon ' . portal_e((string) $document['extension']) . '">' . portal_e(strtoupper((string) $document['extension'])) . '</span><div class="document-row-main"><a class="document-row-title" href="' . $link . '">' . portal_e((string) $document['title']) . '</a><div class="document-row-detail">' . portal_e((string) ($document['summary'] ?: $document['file_name'])) . '</div><div class="document-row-path"><span>相對路徑</span><code title="' . portal_e($relativePath) . '">' . portal_e($relativePath) . '</code></div><div class="document-row-tags">' . portal_render_document_type_tags($document) . portal_render_phase_roles($document['phase_roles'], $focusStage) . $status . '</div>' . $mutationActions . '</div><div class="document-row-meta"><span>' . portal_e(strtoupper((string) $document['extension'])) . ' · ' . portal_e(portal_format_file_size((int) $document['file_size_bytes'])) . '</span><time>建立 ' . portal_e(portal_format_datetime((string) $document['created_at'])) . '</time><time>修改 ' . portal_e(portal_format_datetime((string) $document['source_modified_at'])) . '</time></div></article>';
 }
 
@@ -1222,7 +1219,7 @@ function portal_render_admin_document_table(array $documents, array $types, arra
             . '<td><time datetime="' . portal_e((string) $document['source_modified_at']) . '">' . portal_e(portal_format_datetime((string) $document['source_modified_at'])) . '</time></td>'
             . '<td>' . portal_render_phase_roles($document['phase_roles']) . '</td>'
             . '<td><a class="secondary-button compact-button" href="' . portal_url('admin_document', ['id' => (string) $document['public_id']]) . '">設定</a>'
-            . ((string)$document['status_code']==='archived' && getenv('PORTAL_DOCUMENT_MUTATIONS_ENABLED')==='1' ? '<form method="post" action="'.portal_e(portal_url('document_restore')).'">'.portal_csrf_field().'<input type="hidden" name="id" value="'.portal_e((string)$document['public_id']).'"><button class="secondary-button compact-button" type="submit">解除封存</button></form>' : '')
+            . ((string)$document['status_code']==='archived' && portal_document_mutations_request_enabled() ? '<form method="post" action="'.portal_e(portal_url('document_restore')).'">'.portal_csrf_field().'<input type="hidden" name="id" value="'.portal_e((string)$document['public_id']).'"><button class="secondary-button compact-button" type="submit">解除封存</button></form>' : '')
             . '</td></tr>';
     }
     if ($rows === '') {
