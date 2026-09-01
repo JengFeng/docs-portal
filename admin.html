@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c506a">
+    <meta name="robots" content="noindex, nofollow">
+    <title>帳號管理｜供水監測文件協作平台</title>
+    <link rel="stylesheet" href="assets/prototype.css">
+    <script src="assets/prototype.js" defer></script>
+  </head>
+  <body class="prototype-body app-body">
+    <div class="prototype-banner compact" role="status">
+      <span class="prototype-dot" aria-hidden="true"></span>
+      Page Flow 原型 · 以下帳號與操作皆為示意，未寫入資料庫
+    </div>
+    <header class="app-header">
+      <a class="brand" href="documents.html" aria-label="前往文件庫">
+        <span class="brand-mark" aria-hidden="true">水</span>
+        <span><strong>供水監測</strong><small>文件協作平台</small></span>
+      </a>
+      <nav class="main-nav" aria-label="主要導覽">
+        <a href="documents.html">文件庫</a>
+        <a href="page-flow.html">Page Flow</a>
+        <a class="active" href="admin.html" aria-current="page">帳號管理</a>
+      </nav>
+      <div class="header-user">
+        <span class="user-avatar admin" aria-hidden="true">管</span>
+        <span class="user-name">系統管理員 <small>管理員（示意）</small></span>
+        <a class="header-link" href="index.html" data-signout>登出</a>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="hero hero-row" aria-labelledby="admin-title">
+        <div>
+          <p class="eyebrow">ADMIN ONLY · ACCOUNT CONTROL</p>
+          <h1 id="admin-title">系統帳號管理</h1>
+          <p class="lead">正式版只有管理員能建立、啟用、停用帳號。使用者不會看到公開註冊入口。</p>
+        </div>
+        <button class="primary-button" type="button" data-open-account-dialog>新增帳號</button>
+      </section>
+
+      <div class="notice-strip" role="note">
+        <span aria-hidden="true">ⓘ</span>
+        <p>此頁用於確認權限流程。帳號將儲存密碼雜湊與角色，不會保存明文密碼；新增帳號流程不透過 Discord 傳遞密碼。</p>
+      </div>
+
+      <section class="account-panel panel" aria-labelledby="accounts-title">
+        <div class="section-heading">
+          <div><h2 id="accounts-title">已授權帳號</h2><p>示意資料；正式版由 MSSQL 的帳號資料表提供。</p></div>
+          <span class="count-badge">3 個帳號</span>
+        </div>
+        <div class="account-table" role="table" aria-label="帳號清單">
+          <div class="account-row account-head" role="row">
+            <span role="columnheader">帳號／姓名</span><span role="columnheader">角色</span><span role="columnheader">狀態</span><span role="columnheader">最近登入</span><span role="columnheader">操作</span>
+          </div>
+          <div class="account-row" role="row">
+            <span role="cell"><b>admin.demo</b><small>示意管理員</small></span><span role="cell">管理員</span><span role="cell"><i class="status-chip ready">啟用中</i></span><span role="cell">2026-08-19 09:12</span><span role="cell"><button class="table-action" type="button" data-open-account-dialog data-account-name="admin.demo">管理</button></span>
+          </div>
+          <div class="account-row" role="row">
+            <span role="cell"><b>reader.demo</b><small>示意閱讀者</small></span><span role="cell">閱讀者</span><span role="cell"><i class="status-chip ready">啟用中</i></span><span role="cell">2026-08-18 17:40</span><span role="cell"><button class="table-action" type="button" data-open-account-dialog data-account-name="reader.demo">管理</button></span>
+          </div>
+          <div class="account-row" role="row">
+            <span role="cell"><b>review.user</b><small>示意帳號</small></span><span role="cell">閱讀者</span><span role="cell"><i class="status-chip muted-chip">已停用</i></span><span role="cell">2026-08-12 14:03</span><span role="cell"><button class="table-action" type="button" data-open-account-dialog data-account-name="review.user">管理</button></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="account-dialog" id="account-dialog" aria-labelledby="account-dialog-title">
+      <form method="dialog" class="dialog-close-form"><button type="submit" class="dialog-close" aria-label="關閉視窗">×</button></form>
+      <p class="eyebrow">ADMIN FLOW PROTOTYPE</p>
+      <h2 id="account-dialog-title">新增系統帳號</h2>
+      <p class="muted" id="account-dialog-description">正式版會由管理員設定帳號、角色與初始密碼；密碼僅可於受控後台輸入。</p>
+      <form class="account-form" data-demo-account-form>
+        <label>系統帳號<input id="account-username" type="text" placeholder="例如：user.name" required></label>
+        <label>顯示名稱<input type="text" placeholder="例如：王小明" required></label>
+        <label>角色
+          <select>
+            <option>閱讀者</option>
+            <option>管理員</option>
+          </select>
+        </label>
+        <label class="check-label"><input type="checkbox" checked> 帳號建立後立即啟用</label>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" data-close-account-dialog>取消</button>
+          <button class="primary-button" type="submit">儲存帳號（示意）</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="prototype-toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

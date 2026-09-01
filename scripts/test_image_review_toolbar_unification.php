@@ -1,0 +1,15 @@
+<?php
+declare(strict_types=1);
+function image_toolbar_assert(bool $condition,string $message):void{if(!$condition){fwrite(STDERR,"[FAIL] {$message}\n");exit(1);}}
+$root=dirname(__DIR__);$php=(string)file_get_contents($root.'/app/image_library.php');$js=(string)file_get_contents($root.'/assets/image-library.js');$css=(string)file_get_contents($root.'/assets/app.css')."\n".(string)file_get_contents($root.'/assets/site-feedback.css');
+image_toolbar_assert(str_contains($php,"['browse','瀏覽圖片'],['select','移動／調整'],['rectangle','框選'],['arrow','箭頭'],['highlight','螢光'],['text','文字'],['number','編號']"),'IMAGE REVIEW annotation tools must match the image-specific reference toolbar order and names');
+image_toolbar_assert(str_contains($php,"(\$tool[0]==='browse'?'true':'false')"),'browse must be the initial non-editing tool just like the feedback toolbar');
+image_toolbar_assert(!str_contains($js,"window.prompt('請輸入這個標註的修改說明")&&!str_contains($js,"window.prompt(tool==='text'")&&!str_contains($js,'window.prompt('),'IMAGE REVIEW creation must not use blocking naming or note prompts');
+image_toolbar_assert(str_contains($js,"fabricCanvas.on('mouse:move'")&&str_contains($js,'renderDrawingPreview')&&str_contains($js,'drawing.preview'),'drag tools must show a live Fabric preview between pointer down and up');
+image_toolbar_assert(str_contains($js,'Math.hypot(item.geometry.x2-item.geometry.x1,item.geometry.y2-item.geometry.y1)'),'arrow minimum size must use total endpoint distance so horizontal and vertical arrows remain valid');
+image_toolbar_assert(str_contains($js,"fabricCanvas.upperCanvasEl.addEventListener('pointercancel',(event)=>{cancelDrawing();scheduleTransformRelease(event);})")&&str_contains($js,"fabricCanvas.upperCanvasEl.addEventListener('touchcancel',(event)=>{cancelDrawing();scheduleTransformRelease(event);})"),'cancelled pointer and touch gestures must discard drawing previews and schedule active-transform release');
+image_toolbar_assert(str_contains($js,"fabricCanvas.allowTouchScrolling=tool==='browse'")&&str_contains($js,"fabricCanvas.upperCanvasEl.style.touchAction=touchAction"),'browse mode must restore touch panning on Fabric actual pointer surface');
+image_toolbar_assert(str_contains($js,"remember();annotations.push(item);selectedIndex=annotations.length-1")&&str_contains($js,"note:''")&&str_contains($js,"textarea.focus({preventScroll:true})"),'pointer release must create an annotation immediately and focus its right-side note field');
+image_toolbar_assert(str_contains($js,"const missingNote=annotations.findIndex")&&str_contains($js,"請先填寫每一項標註的修改說明"),'save must fail locally until newly created prompt-free annotations have notes');
+image_toolbar_assert(str_contains($php,'class="site-feedback-tool-button" data-image-tool=')&&str_contains($css,'.site-feedback-tool-button:hover,.site-feedback-tool-button[aria-pressed=true]')&&str_contains($css,'background:#e9f8f9')&&str_contains($css,'min-height:2.7rem'),'IMAGE REVIEW tool buttons must use the exact shared feedback-toolbar visual and active-state contract');
+echo "[OK] IMAGE REVIEW unified toolbar and direct-draw contracts passed.\n";

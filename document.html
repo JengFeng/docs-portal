@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c506a">
+    <meta name="robots" content="noindex, nofollow">
+    <title>文件閱讀｜供水監測文件協作平台</title>
+    <link rel="stylesheet" href="assets/prototype.css">
+    <script src="assets/prototype.js" defer></script>
+  </head>
+  <body class="prototype-body app-body">
+    <div class="prototype-banner compact" role="status">
+      <span class="prototype-dot" aria-hidden="true"></span>
+      Page Flow 原型 · 此頁為文件預覽示意，下載與連結複製不會存取真實檔案
+    </div>
+    <header class="app-header">
+      <a class="brand" href="documents.html" aria-label="前往文件庫">
+        <span class="brand-mark" aria-hidden="true">水</span>
+        <span><strong>供水監測</strong><small>文件協作平台</small></span>
+      </a>
+      <nav class="main-nav" aria-label="主要導覽">
+        <a class="active" href="documents.html">文件庫</a>
+        <a href="page-flow.html">Page Flow</a>
+      </nav>
+      <div class="header-user">
+        <span class="user-avatar" aria-hidden="true">王</span>
+        <span class="user-name">王小明 <small>閱讀者（示意）</small></span>
+        <a class="header-link" href="index.html" data-signout>登出</a>
+      </div>
+    </header>
+
+    <main class="page-shell document-page">
+      <a class="back-link" href="documents.html"><span aria-hidden="true">←</span> 返回文件庫</a>
+      <nav class="breadcrumbs" aria-label="麵包屑">
+        <a href="documents.html">文件庫</a><span aria-hidden="true">/</span><span data-document-category>交付工項</span><span aria-hidden="true">/</span><strong data-document-name>第一階段交付工項.md</strong>
+      </nav>
+
+      <div class="document-layout">
+        <article class="document-main panel">
+          <header class="document-header">
+            <div>
+              <p class="eyebrow">STEP 3 · READ &amp; CONFIRM</p>
+              <div class="title-with-type">
+                <span class="file-icon md" data-document-icon>MD</span>
+                <h1 data-document-title>第一階段交付工項</h1>
+              </div>
+              <p class="document-subtitle" data-document-description>彙整第一階段需要完成的供水監測功能擴充項目。</p>
+            </div>
+            <div class="document-actions">
+              <button class="secondary-button" type="button" data-copy-document-link>複製連結</button>
+              <button class="primary-button" type="button" data-demo-download>下載原始檔</button>
+            </div>
+          </header>
+          <div class="document-preview-meta">
+            <span data-document-format>Markdown 文件</span>
+            <span data-document-stage-summary>01 規劃與需求分析：產出</span>
+            <span>更新於 <time data-document-updated>2026-08-18 16:20</time></span>
+            <span>建立者：<b data-document-author>Discord 協作流程</b></span>
+          </div>
+          <div class="document-preview markdown-content" data-document-body></div>
+        </article>
+
+        <aside class="document-aside">
+          <section class="panel metadata-card">
+            <h2>文件資訊</h2>
+            <dl>
+              <div><dt>文件類型</dt><dd data-document-category>需求與規格</dd></div>
+              <div><dt>檔案格式</dt><dd data-document-format>Markdown 文件</dd></div>
+              <div><dt>SSDLC 階段</dt><dd data-document-stages>01 規劃與需求分析</dd></div>
+              <div><dt>檔案大小</dt><dd data-document-size>18 KB</dd></div>
+              <div><dt>狀態</dt><dd><span class="status-chip ready">可閱讀</span></dd></div>
+            </dl>
+          </section>
+
+          <section class="panel lifecycle-card">
+            <p class="eyebrow">SSDLC TRACEABILITY</p>
+            <h2>生命週期關聯</h2>
+            <ol class="lifecycle-list" data-document-lifecycle-list>
+              <li><span>01</span><div><strong>規劃與需求分析</strong><small>產出</small></div></li>
+              <li><span>02</span><div><strong>系統設計</strong><small>輸入</small></div></li>
+            </ol>
+          </section>
+
+          <section class="panel discord-card">
+            <p class="eyebrow">STEP 4 · REQUEST CHANGE</p>
+            <h2>需要調整內容？</h2>
+            <p>請回 Discord 告訴我需要修改哪一段；完成後重新整理文件庫即可查看新版本。</p>
+            <blockquote data-discord-prompt>請協助調整「第一階段交付工項.md」：請說明要修改的段落與內容。</blockquote>
+            <button class="secondary-button full-width" type="button" data-copy-discord-prompt>複製 Discord 指示</button>
+          </section>
+
+          <section class="panel revision-card">
+            <h2>更新紀錄</h2>
+            <ol class="revision-list">
+              <li><time>08/18 16:20</time><span>建立第一版交付項目彙整</span></li>
+              <li><time>08/18 15:40</time><span>依 RFP 整理功能擴充範圍</span></li>
+            </ol>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <div class="toast" id="prototype-toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

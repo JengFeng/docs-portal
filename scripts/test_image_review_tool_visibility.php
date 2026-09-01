@@ -1,0 +1,10 @@
+<?php
+declare(strict_types=1);
+function image_tool_visibility_assert(bool $condition,string $message):void{if(!$condition){fwrite(STDERR,"[FAIL] {$message}\n");exit(1);}}
+$root=dirname(__DIR__);$css=(string)file_get_contents($root.'/assets/app.css');$js=(string)file_get_contents($root.'/assets/image-library.js');
+image_tool_visibility_assert(str_contains($css,'.image-tool-group button:hover, .image-tool-group button[aria-pressed="true"]')&&str_contains($css,'background: #e9f8f9')&&str_contains($css,'color: #0b6170'),'active IMAGE REVIEW tool must retain the same visible defined foreground/background state as the feedback toolbar');
+image_tool_visibility_assert(str_contains($css,'.image-annotation-item.selected { outline: 2px solid var(--teal);'),'selected annotation card must have a visible defined outline');
+image_tool_visibility_assert(str_contains($css,'.image-annotation-item {')&&str_contains($css,'background: var(--aqua);')&&str_contains($css,'.image-keyboard-help {')&&!str_contains($css,'var(--soft)'),'IMAGE REVIEW cards and help must use defined theme backgrounds');
+image_tool_visibility_assert(str_contains($js,"const refreshCanvasOffset = () => { if (fabricCanvas) fabricCanvas.calcOffset(); };")&&str_contains($js,"scroller?.addEventListener('scroll',refreshCanvasOffset,{passive:true})")&&str_contains($js,"window.addEventListener('scroll',refreshCanvasOffset,{passive:true})")&&str_contains($js,"window.addEventListener('resize',refreshCanvasOffset,{passive:true})")&&str_contains($js,'fabricCanvas.setDimensions({width,height});refreshCanvasOffset();'),'Fabric hit testing must refresh its canvas offset after inner/page scroll, resize, and canvas dimension changes');
+image_tool_visibility_assert(str_contains($js,"const TOOLS = ['browse','select','rectangle','arrow','highlight','text','number']")&&str_contains($js,"button.setAttribute('aria-pressed',button.dataset.imageTool===tool?'true':'false')"),'all tools must retain one persistent pressed-state path without rebuilding the toolbar');
+echo "[OK] IMAGE REVIEW active-tool and selection visibility contracts passed.\n";

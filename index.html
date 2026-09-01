@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c506a">
+    <meta name="robots" content="noindex, nofollow">
+    <title>登入｜供水監測文件協作平台</title>
+    <link rel="stylesheet" href="assets/prototype.css">
+    <script src="assets/prototype.js" defer></script>
+  </head>
+  <body class="prototype-body">
+    <div class="prototype-banner" role="status">
+      <span class="prototype-dot" aria-hidden="true"></span>
+      介面流程原型：目前使用模擬資料，尚未連接帳號驗證、MSSQL 或實際文件。
+    </div>
+
+    <main class="login-shell">
+      <section class="login-intro" aria-labelledby="login-intro-title">
+        <a class="brand brand-large" href="index.html" aria-label="供水監測文件協作平台首頁">
+          <span class="brand-mark" aria-hidden="true">水</span>
+          <span>
+            <strong>供水監測</strong>
+            <small>文件協作平台</small>
+          </span>
+        </a>
+        <p class="eyebrow">LIVE DOCUMENT PORTAL</p>
+        <h1 id="login-intro-title">文件產出後，團隊能立即從網頁查看。</h1>
+        <p class="lead">
+          團隊在 Discord 提出文件需求後，系統將核准的新文件放入公開文件來源；
+          使用者登入本平台即可瀏覽、預覽、下載，並回到 Discord 提出修訂。
+        </p>
+
+        <ol class="login-flow" aria-label="服務流程">
+          <li>
+            <span>1</span>
+            <div><strong>Discord 提出需求</strong><small>溝通、產出或調整文件內容。</small></div>
+          </li>
+          <li>
+            <span>2</span>
+            <div><strong>文件即時出現</strong><small>新產出文件會列入受保護的文件庫。</small></div>
+          </li>
+          <li>
+            <span>3</span>
+            <div><strong>登入後閱讀確認</strong><small>在瀏覽器預覽、下載，再回 Discord 回饋。</small></div>
+          </li>
+        </ol>
+        <a class="text-link" href="page-flow.html">查看完整 Page Flow <span aria-hidden="true">→</span></a>
+      </section>
+
+      <section class="login-card panel" aria-labelledby="login-title">
+        <p class="eyebrow">STEP 1 · SIGN IN</p>
+        <h2 id="login-title">登入文件協作平台</h2>
+        <p class="muted">正式上線後，僅限管理員建立的系統帳號登入。</p>
+        <form class="login-form" data-demo-login novalidate>
+          <label>
+            系統帳號
+            <input name="username" type="text" inputmode="email" autocomplete="username" placeholder="例如：user.name" required>
+          </label>
+          <label>
+            密碼
+            <span class="password-control">
+              <input name="password" type="password" autocomplete="current-password" placeholder="請輸入密碼" required>
+              <button class="text-button" type="button" data-toggle-password aria-label="顯示密碼">顯示</button>
+            </span>
+          </label>
+          <p class="form-message" data-login-message aria-live="polite"></p>
+          <button class="primary-button full-width" type="submit">登入並查看文件</button>
+        </form>
+        <div class="demo-note">
+          <strong>原型操作提示</strong>
+          <span>任意填入帳號與密碼後即可進入下一頁；輸入 locked 可查看登入失敗狀態；資料不會被傳送或保存。</span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="prototype-footer">
+      <span>供水監測文件協作平台 · HTML Page Flow Prototype</span>
+      <a href="page-flow.html">檢視流程說明</a>
+    </footer>
+  </body>
+</html>

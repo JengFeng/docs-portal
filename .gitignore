@@ -1,0 +1,59 @@
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+*.secret
+*.credentials
+
+# Runtime and private data
+app/bridge_settings.json
+.hermes/
+document-library/
+runtime/
+storage/
+sessions/
+cache/
+tmp/
+temp/
+uploads/
+.discord_uploads/
+.discord_outbox/
+
+# Generated artifacts and backups
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.quarantined
+web.config.*backup*
+.presentation-preview-test-*/
+*.pid
+*.lock
+*.zip
+*.7z
+
+# Dependencies and build caches
+node_modules/
+/vendor/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.uv-cache/
+dist/
+build/
+
+# IDE / OS files
+.vscode/
+.idea/
+.vs/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local database artifacts
+*.mdf
+*.ndf
+*.ldf
+*.bak

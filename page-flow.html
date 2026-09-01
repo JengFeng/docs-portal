@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c506a">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Page Flow｜供水監測文件協作平台</title>
+    <link rel="stylesheet" href="assets/prototype.css">
+    <script src="assets/prototype.js" defer></script>
+  </head>
+  <body class="prototype-body app-body">
+    <div class="prototype-banner compact" role="status">
+      <span class="prototype-dot" aria-hidden="true"></span>
+      Page Flow 原型 · 用於確認使用者旅程，尚未串接後端
+    </div>
+    <header class="app-header">
+      <a class="brand" href="documents.html" aria-label="前往文件庫">
+        <span class="brand-mark" aria-hidden="true">水</span>
+        <span><strong>供水監測</strong><small>文件協作平台</small></span>
+      </a>
+      <nav class="main-nav" aria-label="主要導覽">
+        <a href="documents.html">文件庫</a>
+        <a class="active" href="page-flow.html" aria-current="page">Page Flow</a>
+      </nav>
+      <div class="header-user">
+        <span class="user-avatar" aria-hidden="true">王</span>
+        <span class="user-name">王小明 <small>閱讀者（示意）</small></span>
+        <a class="header-link" href="index.html" data-signout>登出</a>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="hero centered-hero" aria-labelledby="flow-title">
+        <p class="eyebrow">PAGE FLOW REVIEW</p>
+        <h1 id="flow-title">Discord 產出、網頁確認的協作流程</h1>
+        <p class="lead">網頁負責安全瀏覽與確認，文件內容的產出與修訂仍以 Discord 對話為主，避免權限與版本分散。</p>
+      </section>
+
+      <section class="flow-diagram panel" aria-label="主要使用流程">
+        <div class="flow-step external">
+          <span class="flow-number">1</span>
+          <div><small>Discord</small><h2>提出需求或修訂</h2><p>說明想產出的文件或欲調整的內容。</p></div>
+        </div>
+        <span class="flow-arrow" aria-hidden="true">→</span>
+        <div class="flow-step system">
+          <span class="flow-number">2</span>
+          <div><small>受保護的文件來源</small><h2>產出並更新文件</h2><p>僅將後續新產出且可公開的檔案列入文件庫。</p></div>
+        </div>
+        <span class="flow-arrow" aria-hidden="true">→</span>
+        <div class="flow-step user">
+          <span class="flow-number">3</span>
+          <div><small>瀏覽器</small><h2>登入並確認文件</h2><p>瀏覽、預覽、下載，再回 Discord 給予回饋。</p></div>
+        </div>
+      </section>
+
+      <section class="page-flow-grid" aria-label="各頁面流程">
+        <article class="flow-page-card">
+          <span class="page-step">Page 01</span>
+          <h2>登入</h2>
+          <p>輸入系統帳號與密碼；正式版由 MSSQL 驗證帳號狀態與角色。</p>
+          <a class="secondary-button" href="index.html">查看登入頁</a>
+        </article>
+        <article class="flow-page-card">
+          <span class="page-step">Page 02</span>
+          <h2>文件庫</h2>
+          <p>查看新產出文件、依分類與關鍵字搜尋，並以重新整理確認最新清單。</p>
+          <a class="secondary-button" href="documents.html">查看文件庫</a>
+        </article>
+        <article class="flow-page-card">
+          <span class="page-step">Page 03</span>
+          <h2>文件閱讀</h2>
+          <p>預覽內容、查閱更新資訊、下載原始檔，必要時複製 Discord 修改指示。</p>
+          <a class="secondary-button" href="document.html?doc=phase1">查看閱讀頁</a>
+        </article>
+        <article class="flow-page-card">
+          <span class="page-step">ADMIN ONLY</span>
+          <h2>帳號管理</h2>
+          <p>僅管理員建立、啟用或停用帳號；前台不設公開註冊。</p>
+          <a class="secondary-button" href="admin.html">查看管理頁</a>
+        </article>
+        <article class="flow-page-card">
+          <span class="page-step">State</span>
+          <h2>例外狀態</h2>
+          <p>沒有文件、沒有權限或系統維護時，提供清楚的下一步指引。</p>
+          <a class="secondary-button" href="status.html">查看狀態頁</a>
+        </article>
+      </section>
+
+      <section class="boundary-note">
+        <div><span aria-hidden="true">✓</span><strong>網頁做的事</strong><p>登入、文件清單、預覽、下載、確認資訊。</p></div>
+        <div><span aria-hidden="true">↗</span><strong>Discord 做的事</strong><p>提需求、產出內容、提出修改與協作對話。</p></div>
+        <div><span aria-hidden="true">⊘</span><strong>刻意不提供</strong><p>公開註冊、前台上傳、前台直接改檔，降低誤傳與版本混亂。</p></div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c506a">
+    <meta name="robots" content="noindex, nofollow">
+    <title>文件庫｜供水監測文件協作平台</title>
+    <link rel="stylesheet" href="assets/prototype.css">
+    <script src="assets/prototype.js" defer></script>
+  </head>
+  <body class="prototype-body app-body">
+    <div class="prototype-banner compact" role="status">
+      <span class="prototype-dot" aria-hidden="true"></span>
+      Page Flow 原型 · 文件、帳號與更新時間皆為示意資料
+    </div>
+    <header class="app-header">
+      <a class="brand" href="documents.html" aria-label="前往文件庫">
+        <span class="brand-mark" aria-hidden="true">水</span>
+        <span><strong>供水監測</strong><small>文件協作平台</small></span>
+      </a>
+      <nav class="main-nav" aria-label="主要導覽">
+        <a class="active" href="documents.html" aria-current="page">文件庫</a>
+        <a href="page-flow.html">Page Flow</a>
+      </nav>
+      <div class="header-user">
+        <span class="user-avatar" aria-hidden="true">王</span>
+        <span class="user-name">王小明 <small>閱讀者（示意）</small></span>
+        <a class="header-link" href="index.html" data-signout>登出</a>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="hero hero-row" aria-labelledby="documents-title">
+        <div>
+          <p class="eyebrow">STEP 2 · DOCUMENT LIBRARY</p>
+          <h1 id="documents-title">即時文件庫</h1>
+          <p class="lead">登入後直接讀取「公開文件」來源。後續串接完成時，新產出的文件重新整理後即可出現。</p>
+        </div>
+        <div class="hero-actions">
+          <span class="live-indicator"><i aria-hidden="true"></i> 即時讀取模式</span>
+          <button class="secondary-button" type="button" data-refresh-documents>重新整理</button>
+        </div>
+      </section>
+
+      <div class="notice-strip" role="note">
+        <span aria-hidden="true">ⓘ</span>
+        <p>這是版面與流程驗收頁。正式版不提供前台上傳或直接編輯；如需調整內容，請由文件頁面的指引回 Discord 提出需求。</p>
+      </div>
+
+      <section class="view-switcher panel" aria-labelledby="view-switcher-title">
+        <div>
+          <p class="eyebrow">DOCUMENT VIEWS</p>
+          <h2 id="view-switcher-title">以不同視角檢視同一批文件</h2>
+          <p>可依 SSDLC 階段追蹤輸入與產出關係，或改以文件用途快速瀏覽；檔案格式會另列為次要標籤。</p>
+        </div>
+        <div class="view-tabs" role="tablist" aria-label="文件檢視方式">
+          <button class="view-tab active" type="button" role="tab" aria-selected="true" data-view-mode="stage">
+            <span>依 SSDLC 階段</span><small>輸入／產出脈絡</small>
+          </button>
+          <button class="view-tab" type="button" role="tab" aria-selected="false" data-view-mode="type">
+            <span>依文件類型</span><small>文件用途與內容</small>
+          </button>
+        </div>
+      </section>
+
+      <div class="library-layout">
+        <aside class="library-sidebar panel" aria-label="文件篩選">
+          <div class="side-heading">
+            <div>
+              <p class="side-eyebrow" id="filter-eyebrow">SSDLC STAGES</p>
+              <h2 id="filter-heading">選擇階段</h2>
+            </div>
+            <button class="text-button" type="button" data-clear-library>清除</button>
+          </div>
+          <div class="category-list" id="library-filter-list" role="list" aria-live="polite"></div>
+          <div class="sidebar-tip" id="library-filter-tip">
+            <strong>階段對應原則</strong>
+            <span>每份文件可同時標示為本階段產出與下一階段輸入，保留跨階段追溯關係。</span>
+          </div>
+        </aside>
+
+        <section class="library-content">
+          <section class="stage-overview panel" id="stage-overview" aria-live="polite">
+            <div class="stage-overview-heading">
+              <div>
+                <p class="eyebrow" id="stage-eyebrow">SSDLC OVERVIEW</p>
+                <h2 id="stage-title">全部 SSDLC 階段</h2>
+                <p id="stage-description">從跨階段共用資料到維護營運，以輸入／產出關係檢視目前文件。</p>
+              </div>
+              <div class="stage-counts" aria-label="階段文件統計">
+                <span><b id="stage-input-count">0</b> 輸入</span>
+                <span><b id="stage-output-count">0</b> 產出</span>
+              </div>
+            </div>
+            <div class="expected-artifacts" id="stage-expected-artifacts"></div>
+            <div class="io-filter" role="group" aria-label="階段文件角色篩選">
+              <span>顯示角色</span>
+              <button class="io-filter-button active" type="button" data-io-filter="all">全部</button>
+              <button class="io-filter-button" type="button" data-io-filter="input">輸入</button>
+              <button class="io-filter-button" type="button" data-io-filter="output">產出</button>
+            </div>
+          </section>
+
+          <div class="toolbar panel">
+            <label class="search-field">
+              <span class="sr-only">搜尋文件</span>
+              <span aria-hidden="true">⌕</span>
+              <input id="document-search" type="search" placeholder="搜尋檔名、文件類型、階段或說明">
+            </label>
+            <div class="toolbar-meta">
+              <span id="documents-count" aria-live="polite">載入中</span>
+              <span>最後讀取：剛剛</span>
+            </div>
+          </div>
+          <section class="file-list panel" aria-labelledby="file-list-title">
+            <div class="section-heading">
+              <div>
+                <h2 id="file-list-title">SSDLC 文件</h2>
+                <p id="file-list-description">依目前選擇的階段、角色與關鍵字篩選。</p>
+              </div>
+              <span class="count-badge" id="documents-badge">0 件</span>
+            </div>
+            <div class="document-rows" id="document-list" aria-live="polite"></div>
+          </section>
+        </section>
+      </div>
+    </main>
+
+    <div class="toast" id="prototype-toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
