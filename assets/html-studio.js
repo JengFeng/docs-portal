@@ -32,18 +32,41 @@
   let drawHistory = [];
   let selectedElement = null;
   let annotationDrag = null;
+  let annotationTool = 'rect';
+  let annotationRecords = [];
+  let selectedAnnotationId = null;
+  let annotationDraftElement = null;
+  let nextAnnotationNumber = 1;
   let annotationCount = 0;
   let generatedSource = '';
+  let htmlGenerated = false;
   let canvasSelection = null;
   let selectionAction = null;
   let draftSaveTimer = null;
   let restoredSourceImage = '';
   let restoredGeneratedSource = false;
   let restoredAnnotations = [];
+  let annotationNormalizationPending = false;
+  let generatedInstructionText = '';
+  let generatedInstructionPayload = null;
 
   function setSaveState(text, isError = false) {
     saveState.textContent = text;
     saveState.classList.toggle('is-error', isError);
+  }
+
+  function updateGeneratedAvailability() {
+    $$('[data-studio-requires-generated]').forEach((control) => { control.disabled = !htmlGenerated; });
+    const status = $('[data-studio-generation-status]');
+    if (status) status.textContent = htmlGenerated
+      ? 'HTML 已產生；比較、預覽與標註功能已解鎖。'
+      : '尚未產生 HTML；比較、預覽與標註功能已鎖定。';
+  }
+
+  function invalidateGeneratedHtml() {
+    htmlGenerated = false;
+    generatedSource = '';
+    updateGeneratedAvailability();
   }
 
   function sanitizeMarkup(input) {
@@ -143,42 +166,217 @@
     compareFrame.style.transform = `scale(${surface.clientWidth / 1200})`;
   }
 
+  const annotationTypeLabels = { rect: '框選', circle: '圓圈', arrow: '箭頭', number: '數字' };
+
+  function makeAnnotationId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return `ann-${window.crypto.randomUUID()}`;
+    return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  function normalizeAnnotationRecord(raw, index) {
+    if (!raw || typeof raw !== 'object') return null;
+    const type = Object.hasOwn(annotationTypeLabels, raw.type) ? raw.type : 'rect';
+    const annotationId = typeof raw.annotationId === 'string' && /^ann-[A-Za-z0-9_-]{6,100}$/.test(raw.annotationId) ? raw.annotationId : makeAnnotationId();
+    const record = {
+      annotationId,
+      number: index + 1,
+      type,
+      text: String(raw.text ?? raw.label ?? '').slice(0, 2000),
+      x: Number(raw.x), y: Number(raw.y), width: Number(raw.width), height: Number(raw.height),
+      x2: Number(raw.x2), y2: Number(raw.y2)
+    };
+    if (!Number.isFinite(record.x) || !Number.isFinite(record.y) || record.x < 0 || record.x > 1 || record.y < 0 || record.y > 1) return null;
+    if (type === 'number') return record;
+    if (type === 'arrow') {
+      if (!Number.isFinite(record.x2)) record.x2 = Math.min(1, record.x + Math.max(0.02, Number(raw.width) || 0.1));
+      if (!Number.isFinite(record.y2)) record.y2 = Math.min(1, record.y + Math.max(0.02, Number(raw.height) || 0.1));
+      if (record.x2 < 0 || record.x2 > 1 || record.y2 < 0 || record.y2 > 1) return null;
+      return record;
+    }
+    if (!Number.isFinite(record.width) || !Number.isFinite(record.height) || record.width <= 0 || record.height <= 0 || record.x + record.width > 1.001 || record.y + record.height > 1.001) return null;
+    return record;
+  }
+
+  function serializeAnnotationRecord(record) {
+    const base = { annotationId: record.annotationId, number: record.number, type: record.type, text: record.text, x: record.x, y: record.y };
+    if (record.type === 'arrow') return { ...base, x2: record.x2, y2: record.y2 };
+    if (record.type === 'number') return base;
+    return { ...base, width: record.width, height: record.height };
+  }
+
+  function annotationRecordNeedsNormalization(raw, record) {
+    const canonical = serializeAnnotationRecord(record);
+    const allowed = new Set(Object.keys(canonical));
+    if (Object.keys(raw).some((key) => !allowed.has(key))) return true;
+    const projection = {};
+    Object.keys(canonical).forEach((key) => { projection[key] = raw[key]; });
+    return JSON.stringify(projection) !== JSON.stringify(canonical);
+  }
+
   function serializeAnnotations() {
-    return $$('.studio-annotation-box', annotationLayer).map((box) => {
-      try {
-        const geometry = JSON.parse(box.dataset.geometry || '{}');
-        return {
-          x: Math.max(0, Math.min(1, Number(geometry.x) || 0)),
-          y: Math.max(0, Math.min(1, Number(geometry.y) || 0)),
-          width: Math.max(0, Math.min(1, Number(geometry.width) || 0)),
-          height: Math.max(0, Math.min(1, Number(geometry.height) || 0)),
-          label: String(box.dataset.label || '新標註').slice(0, 36)
-        };
-      } catch (_) { return null; }
-    }).filter((record) => record && record.width > 0 && record.height > 0).slice(0, 100);
+    return annotationRecords.slice(0, 100).map(serializeAnnotationRecord);
+  }
+
+  function selectAnnotation(annotationId, options = {}) {
+    if (!annotationRecords.some((record) => record.annotationId === annotationId)) return;
+    selectedAnnotationId = annotationId;
+    $$('[data-annotation-id]', annotationLayer).forEach((shape) => shape.classList.toggle('is-selected', shape.dataset.annotationId === annotationId));
+    $$('[data-annotation-card]').forEach((card) => card.setAttribute('aria-current', card.dataset.annotationId === annotationId ? 'true' : 'false'));
+    const card = $(`[data-annotation-card][data-annotation-id="${CSS.escape(annotationId)}"]`);
+    if (card && options.scroll) card.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    if (card && options.focus) requestAnimationFrame(() => card.querySelector('textarea')?.focus({ preventScroll: true }));
+  }
+
+  function createAnnotationShape(record, draft = false) {
+    const shape = document.createElement('div');
+    shape.className = `studio-annotation-shape studio-annotation-${record.type}${draft ? ' is-draft' : ''}`;
+    shape.dataset.annotationType = record.type;
+    shape.dataset.number = String(record.number || nextAnnotationNumber);
+    if (!draft) shape.dataset.annotationId = record.annotationId;
+    if (record.type === 'number') {
+      shape.textContent = String(record.number || nextAnnotationNumber);
+      shape.style.left = `${record.x * 100}%`; shape.style.top = `${record.y * 100}%`;
+    } else {
+      const badge = document.createElement('span'); badge.className = 'studio-annotation-badge'; badge.textContent = String(record.number || nextAnnotationNumber); shape.append(badge);
+      shape.style.left = `${record.x * 100}%`; shape.style.top = `${record.y * 100}%`;
+      if (record.type === 'arrow') {
+        const dx = (record.x2 - record.x) * annotationLayer.clientWidth;
+        const dy = (record.y2 - record.y) * annotationLayer.clientHeight;
+        shape.style.width = `${Math.hypot(dx, dy)}px`;
+        shape.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+      } else {
+        shape.style.width = `${record.width * 100}%`; shape.style.height = `${record.height * 100}%`;
+      }
+    }
+    if (!draft) {
+      shape.classList.toggle('is-selected', record.annotationId === selectedAnnotationId);
+      shape.addEventListener('click', (event) => { event.stopPropagation(); selectAnnotation(record.annotationId, { scroll: true }); });
+    }
+    return shape;
+  }
+
+  function renderAnnotationShapes() {
+    annotationLayer.replaceChildren();
+    annotationRecords.forEach((record) => annotationLayer.append(createAnnotationShape(record)));
+  }
+
+  function renderAnnotationList() {
+    const list = $('[data-studio-annotation-list]');
+    list.replaceChildren();
+    if (annotationRecords.length === 0) {
+      const empty = document.createElement('p'); empty.className = 'muted'; empty.dataset.studioAnnotationEmpty = ''; empty.textContent = '尚未建立標註。'; list.append(empty); return;
+    }
+    annotationRecords.forEach((record) => {
+      const card = document.createElement('article'); card.className = 'studio-annotation-card'; card.dataset.annotationCard = ''; card.dataset.annotationId = record.annotationId; card.dataset.number = String(record.number); card.setAttribute('aria-current', record.annotationId === selectedAnnotationId ? 'true' : 'false');
+      const header = document.createElement('header');
+      const number = document.createElement('span'); number.className = 'studio-annotation-card-number'; number.textContent = String(record.number);
+      const type = document.createElement('span'); type.className = 'studio-annotation-card-type'; type.textContent = annotationTypeLabels[record.type];
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '刪除'; remove.setAttribute('aria-label', `刪除標註 ${record.number}`); remove.addEventListener('click', () => { annotationRecords = annotationRecords.filter((item) => item.annotationId !== record.annotationId); annotationRecords.forEach((item, index) => { item.number = index + 1; }); nextAnnotationNumber = annotationRecords.length + 1; if (selectedAnnotationId === record.annotationId) selectedAnnotationId = annotationRecords[0]?.annotationId || null; invalidateInstructions(); renderAnnotations(); scheduleDraftSave(); });
+      header.append(number, type, remove);
+      const textarea = document.createElement('textarea'); textarea.value = record.text; textarea.placeholder = '輸入此編號要修改的內容'; textarea.setAttribute('aria-label', `標註 ${record.number} 修改說明`);
+      textarea.addEventListener('focus', () => selectAnnotation(record.annotationId));
+      textarea.addEventListener('input', () => { record.text = textarea.value.slice(0, 2000); invalidateInstructions(); scheduleDraftSave(); });
+      card.addEventListener('click', (event) => { if (event.target !== remove) selectAnnotation(record.annotationId); });
+      card.append(header, textarea); list.append(card);
+    });
+  }
+
+  function renderAnnotations() {
+    annotationCount = annotationRecords.length;
+    $('[data-studio-annotation-count]').textContent = `${annotationCount} 個標註`;
+    renderAnnotationShapes(); renderAnnotationList();
+  }
+
+  function invalidateInstructions() {
+    generatedInstructionText = '';
+    generatedInstructionPayload = null;
+    const output = $('[data-studio-instruction-output]');
+    if (output) output.value = '';
+    $$('[data-studio-copy-instructions],[data-studio-download-instructions],[data-studio-download-json]').forEach((button) => { button.disabled = true; });
+  }
+
+  function percent(value) { return Math.round(Number(value) * 1000) / 10; }
+
+  function instructionGeometry(record) {
+    if (record.type === 'number') return { xPercent: percent(record.x), yPercent: percent(record.y) };
+    if (record.type === 'arrow') return { startXPercent: percent(record.x), startYPercent: percent(record.y), endXPercent: percent(record.x2), endYPercent: percent(record.y2) };
+    return { xPercent: percent(record.x), yPercent: percent(record.y), widthPercent: percent(record.width), heightPercent: percent(record.height) };
+  }
+
+  function buildInstructionPayload() {
+    const device = $('[data-studio-device].is-active')?.dataset.studioDevice || 'desktop';
+    return {
+      version: 1,
+      project: 'TWWATER HTML 工作室',
+      target: '目前工作室中的 HTML/CSS',
+      logicalViewport: { width: 1200, height: 675 },
+      previewDevice: device,
+      intent: intentInput.value.trim().slice(0, 4000),
+      annotations: annotationRecords.map((record) => ({ annotationId: record.annotationId, number: record.number, type: record.type, typeLabel: annotationTypeLabels[record.type], text: record.text.trim(), geometry: instructionGeometry(record) })),
+      safetyBoundaries: ['只修改標註與文字明確要求的範圍', '保留未標註內容與既有功能', '維持桌面、平板與手機 RWD', '如位置證據互相衝突，停止修改並回報']
+    };
+  }
+
+  function geometryDescription(annotation) {
+    const geometry = annotation.geometry;
+    if (annotation.type === 'number') return `位置：左側 ${geometry.xPercent}%，上方 ${geometry.yPercent}%`;
+    if (annotation.type === 'arrow') return `箭頭：(${geometry.startXPercent}%, ${geometry.startYPercent}%) → (${geometry.endXPercent}%, ${geometry.endYPercent}%)`;
+    return `範圍：左側 ${geometry.xPercent}%，上方 ${geometry.yPercent}%，寬 ${geometry.widthPercent}%，高 ${geometry.heightPercent}%`;
+  }
+
+  function buildInstructionText(payload) {
+    const lines = [
+      'TWWATER HTML 工作室修改指令',
+      '',
+      `目標：${payload.target}`,
+      `原始設計目的：${payload.intent || '未填寫'}`,
+      `比較基準：原始完整大圖與真實 HTML，邏輯尺寸 ${payload.logicalViewport.width} × ${payload.logicalViewport.height}`,
+      `目前檢視裝置：${payload.previewDevice}`,
+      '',
+      '逐項修改：'
+    ];
+    payload.annotations.forEach((annotation) => {
+      lines.push('', `標註 #${annotation.number}（${annotation.typeLabel}）`, geometryDescription(annotation), `修改內容：${annotation.text}`);
+    });
+    lines.push('', '共同驗收與安全邊界：');
+    payload.safetyBoundaries.forEach((boundary, index) => lines.push(`${index + 1}. ${boundary}`));
+    return lines.join('\n');
+  }
+
+  function downloadStudioFile(filename, content, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = filename; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   function restoreAnnotationRecords(records) {
-    annotationLayer.replaceChildren();
-    records.slice(0, 100).forEach((record) => {
-      const box = document.createElement('div');
-      box.className = 'studio-annotation-box'; box.dataset.label = String(record.label || '新標註').slice(0, 36);
-      const geometry = { x: Number(record.x), y: Number(record.y), width: Number(record.width), height: Number(record.height) };
-      if (Object.values(geometry).some((value) => !Number.isFinite(value) || value < 0 || value > 1) || geometry.width <= 0 || geometry.height <= 0) return;
-      box.dataset.geometry = JSON.stringify(geometry);
-      box.style.left = `${geometry.x * 100}%`; box.style.top = `${geometry.y * 100}%`;
-      box.style.width = `${geometry.width * 100}%`; box.style.height = `${geometry.height * 100}%`;
-      annotationLayer.append(box);
+    const seen = new Set();
+    let normalized = records.length > 100;
+    annotationRecords = [];
+    records.slice(0, 100).forEach((raw, index) => {
+      const record = normalizeAnnotationRecord(raw, index);
+      if (!record) { normalized = true; return; }
+      const originalId = typeof raw.annotationId === 'string' ? raw.annotationId : '';
+      if (record.annotationId !== originalId || seen.has(record.annotationId)) {
+        do { record.annotationId = makeAnnotationId(); } while (seen.has(record.annotationId));
+        normalized = true;
+      }
+      record.number = annotationRecords.length + 1;
+      if (annotationRecordNeedsNormalization(raw, record)) normalized = true;
+      seen.add(record.annotationId);
+      annotationRecords.push(record);
     });
-    annotationCount = annotationLayer.children.length;
-    $('[data-studio-annotation-count]').textContent = `${annotationCount} 個標註`;
+    nextAnnotationNumber = annotationRecords.length + 1;
+    selectedAnnotationId = annotationRecords[0]?.annotationId || null;
+    annotationNormalizationPending = normalized;
+    renderAnnotations();
   }
 
   function saveDraft() {
     try {
       const sourceImage = canvas.toDataURL('image/webp', 0.92);
       if (sourceImage.length > 3500000) throw new Error('Source image exceeds browser draft limit.');
-      const payload = JSON.stringify({ version: 2, markup, css, intent: intentInput.value.slice(0, 4000), sourceImage, hasGeneratedSource: generatedSource !== '', annotations: serializeAnnotations() });
+      const payload = JSON.stringify({ version: 2, markup, css, intent: intentInput.value.slice(0, 4000), sourceImage, hasGeneratedSource: htmlGenerated, annotations: serializeAnnotations() });
       localStorage.setItem(storageKey, payload);
       setSaveState('瀏覽器草稿已儲存（含起點大圖）');
     } catch (error) {
@@ -217,17 +415,24 @@
   }
 
   function restoreSourceCanvas() {
-    if (!restoredSourceImage) return;
+    if (!restoredSourceImage) return false;
     const image = new Image();
     image.onload = () => {
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       generatedSource = restoredGeneratedSource ? restoredSourceImage : '';
+      htmlGenerated = restoredGeneratedSource;
       if (generatedSource) sourceCompare.src = generatedSource;
-      setSaveState('已還原瀏覽器草稿（含起點大圖）');
+      updateGeneratedAvailability();
+      if (annotationNormalizationPending) {
+        annotationNormalizationPending = false;
+        saveDraft();
+        setSaveState('已還原並正規化瀏覽器草稿（含起點大圖）');
+      } else setSaveState('已還原瀏覽器草稿（含起點大圖）');
     };
     image.onerror = () => { localStorage.removeItem(storageKey); setSaveState('起點大圖草稿無法還原', true); };
     image.src = restoredSourceImage;
+    return true;
   }
 
   function drawInitialSource() {
@@ -304,7 +509,7 @@
     context.fillStyle = '#fff';
     context.fillRect(canvasSelection.x, canvasSelection.y, canvasSelection.width, canvasSelection.height);
     clearCanvasSelection();
-    generatedSource = '';
+    invalidateGeneratedHtml();
     scheduleDraftSave();
   }
 
@@ -340,7 +545,7 @@
       const text = window.prompt('請輸入要放在大圖上的文字：', '新的說明');
       if (text) {
         saveDrawState(); context.fillStyle = '#173b31'; context.font = '700 28px Microsoft JhengHei'; context.fillText(text.slice(0, 80), point.x, point.y);
-        generatedSource = ''; scheduleDraftSave();
+        invalidateGeneratedHtml(); scheduleDraftSave();
       }
       return;
     }
@@ -382,9 +587,9 @@
       const selection = selectionFromPoints(drawStart, point);
       updateCanvasSelection(selection.width >= 8 && selection.height >= 8 ? selection : null);
     } else if (drawTool === 'select' && selectionAction === 'move') {
-      generatedSource = ''; scheduleDraftSave();
+      invalidateGeneratedHtml(); scheduleDraftSave();
     } else {
-      generatedSource = ''; scheduleDraftSave();
+      invalidateGeneratedHtml(); scheduleDraftSave();
     }
     selectionAction = null;
     drawStart = null;
@@ -397,8 +602,8 @@
   });
 
   selectionDeleteButton.addEventListener('click', deleteCanvasSelection);
-  $('#studio-draw-undo').addEventListener('click', () => { const state = drawHistory.pop(); if (state) { context.putImageData(state, 0, 0); clearCanvasSelection(); generatedSource = ''; scheduleDraftSave(); } });
-  $('#studio-draw-clear').addEventListener('click', () => { saveDrawState(); context.fillStyle = '#fff'; context.fillRect(0, 0, 1200, 675); clearCanvasSelection(); generatedSource = ''; scheduleDraftSave(); });
+  $('#studio-draw-undo').addEventListener('click', () => { const state = drawHistory.pop(); if (state) { context.putImageData(state, 0, 0); clearCanvasSelection(); invalidateGeneratedHtml(); scheduleDraftSave(); } });
+  $('#studio-draw-clear').addEventListener('click', () => { saveDrawState(); context.fillStyle = '#fff'; context.fillRect(0, 0, 1200, 675); clearCanvasSelection(); invalidateGeneratedHtml(); scheduleDraftSave(); });
   $('#studio-image-upload').addEventListener('change', async (event) => {
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
@@ -409,7 +614,7 @@
       if (image.width > 4096 || image.height > 4096) { image.close(); setSaveState('圖片尺寸不可超過 4096 × 4096', true); return; }
       saveDrawState(); context.fillStyle = '#fff'; context.fillRect(0, 0, 1200, 675); clearCanvasSelection();
       const scale = Math.min(1200 / image.width, 675 / image.height); const width = image.width * scale; const height = image.height * scale;
-      context.drawImage(image, (1200 - width) / 2, (675 - height) / 2, width, height); image.close(); generatedSource = ''; scheduleDraftSave(); setSaveState('圖片已放入起點大圖');
+      context.drawImage(image, (1200 - width) / 2, (675 - height) / 2, width, height); image.close(); invalidateGeneratedHtml(); scheduleDraftSave(); setSaveState('圖片已放入起點大圖');
     } catch (error) { console.warn('HTML studio image decode failed', error); setSaveState('圖片無法解碼', true); }
   });
 
@@ -418,6 +623,11 @@
   }
 
   function setMode(nextMode) {
+    if (!htmlGenerated && nextMode !== 'source') {
+      setSaveState('請先完成起點大圖，再按「產生初始 HTML 並開始比較」。', true);
+      updateGeneratedAvailability();
+      return;
+    }
     mode = nextMode;
     $$('[data-studio-mode]').forEach((button) => button.classList.toggle('is-active', button.dataset.studioMode === mode));
     $$('[data-studio-view]').forEach((view) => { view.hidden = view.dataset.studioView !== (mode === 'source' || mode === 'compare' ? mode : 'preview'); });
@@ -436,6 +646,7 @@
     $('[data-studio-stage-title]').textContent = copy[0]; $('[data-studio-stage-help]').textContent = copy[1];
     if (mode === 'compare') { generatedSource = canvas.toDataURL('image/png'); sourceCompare.src = generatedSource; renderAll(); requestAnimationFrame(scaleCompare); updateSteps(1); }
     if (['preview', 'annotate', 'inspect', 'code'].includes(mode)) { renderFrame(previewFrame); updateSteps(mode === 'preview' ? 2 : mode === 'code' ? 4 : 2); }
+    if (mode === 'annotate') requestAnimationFrame(renderAnnotationShapes);
   }
 
   $$('[data-studio-mode]').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.studioMode)));
@@ -445,46 +656,125 @@
     previewShell.classList.remove('is-tablet', 'is-mobile');
     if (button.dataset.studioDevice !== 'desktop') previewShell.classList.add(`is-${button.dataset.studioDevice}`);
     $('[data-studio-device-label]').textContent = button.dataset.studioDevice === 'desktop' ? 'DESKTOP' : button.dataset.studioDevice === 'tablet' ? 'TABLET · 768' : 'MOBILE · 390';
+    invalidateInstructions();
+    requestAnimationFrame(renderAnnotationShapes);
   }));
 
-  $('#studio-generate-html').addEventListener('click', () => { generatedSource = canvas.toDataURL('image/png'); sourceCompare.src = generatedSource; renderAll(); setMode('compare'); saveDraft(); });
+  $('#studio-generate-html').addEventListener('click', () => {
+    generatedSource = canvas.toDataURL('image/png');
+    sourceCompare.src = generatedSource;
+    htmlGenerated = true;
+    updateGeneratedAvailability();
+    renderAll(); setMode('compare'); saveDraft();
+  });
 
   function annotationPoint(event) {
     const rectangle = annotationLayer.getBoundingClientRect();
-    return { x: event.clientX - rectangle.left, y: event.clientY - rectangle.top };
+    return {
+      x: Math.max(0, Math.min(rectangle.width, event.clientX - rectangle.left)),
+      y: Math.max(0, Math.min(rectangle.height, event.clientY - rectangle.top))
+    };
   }
+
+  function annotationGeometry(type, start, end) {
+    const width = annotationLayer.clientWidth; const height = annotationLayer.clientHeight;
+    if (width <= 0 || height <= 0) return null;
+    if (type === 'number') return { x: end.x / width, y: end.y / height };
+    if (type === 'arrow') return { x: start.x / width, y: start.y / height, x2: end.x / width, y2: end.y / height };
+    const left = Math.min(start.x, end.x); const top = Math.min(start.y, end.y);
+    return { x: left / width, y: top / height, width: Math.abs(end.x - start.x) / width, height: Math.abs(end.y - start.y) / height };
+  }
+
+  function createAnnotationRecord(type, start, end) {
+    if (annotationRecords.length >= 100) { setSaveState('標註上限為 100 筆', true); return null; }
+    const geometry = annotationGeometry(type, start, end);
+    if (!geometry) return null;
+    if ((type === 'rect' || type === 'circle') && (Math.abs(end.x - start.x) < 8 || Math.abs(end.y - start.y) < 8)) return null;
+    if (type === 'arrow' && Math.hypot(end.x - start.x, end.y - start.y) < 12) return null;
+    const annotationId = makeAnnotationId();
+    const record = { annotationId, number: nextAnnotationNumber, type, text: '', ...geometry };
+    annotationRecords.push(record); nextAnnotationNumber += 1; selectedAnnotationId = annotationId; invalidateInstructions();
+    renderAnnotations(); selectAnnotation(annotationId, { focus: true, scroll: true }); scheduleDraftSave();
+    return record;
+  }
+
+  function renderAnnotationDraft(type, start, end) {
+    annotationDraftElement?.remove(); annotationDraftElement = null;
+    const geometry = annotationGeometry(type, start, end);
+    if (!geometry) return;
+    annotationDraftElement = createAnnotationShape({ number: nextAnnotationNumber, type, ...geometry }, true);
+    annotationLayer.append(annotationDraftElement);
+  }
+
+  $$('[data-annotation-tool]').forEach((button) => button.addEventListener('click', () => {
+    annotationTool = button.dataset.annotationTool;
+    $$('[data-annotation-tool]').forEach((candidate) => {
+      const active = candidate === button; candidate.classList.toggle('is-active', active); candidate.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }));
+
   annotationLayer.addEventListener('pointerdown', (event) => {
     if (event.target !== annotationLayer) return;
-    const point = annotationPoint(event); const box = document.createElement('div'); box.className = 'studio-annotation-box'; box.dataset.label = '新標註'; box.style.left = `${point.x}px`; box.style.top = `${point.y}px`; annotationLayer.append(box);
-    annotationDrag = { start: point, box };
+    const start = annotationPoint(event);
+    annotationDrag = { start, type: annotationTool, pointerId: event.pointerId };
+    renderAnnotationDraft(annotationTool, start, start);
     try { annotationLayer.setPointerCapture(event.pointerId); } catch (_) {}
   });
   annotationLayer.addEventListener('pointermove', (event) => {
-    if (!annotationDrag) return;
-    const point = annotationPoint(event); const start = annotationDrag.start;
-    annotationDrag.box.style.left = `${Math.min(start.x, point.x)}px`; annotationDrag.box.style.top = `${Math.min(start.y, point.y)}px`;
-    annotationDrag.box.style.width = `${Math.abs(point.x - start.x)}px`; annotationDrag.box.style.height = `${Math.abs(point.y - start.y)}px`;
+    if (!annotationDrag || event.pointerId !== annotationDrag.pointerId) return;
+    renderAnnotationDraft(annotationDrag.type, annotationDrag.start, annotationPoint(event));
   });
-  annotationLayer.addEventListener('pointerup', () => {
-    if (!annotationDrag) return;
-    const box = annotationDrag.box;
-    const width = parseFloat(box.style.width) || 0; const height = parseFloat(box.style.height) || 0;
-    if (width < 8 || height < 8 || annotationLayer.clientWidth <= 0 || annotationLayer.clientHeight <= 0) {
-      box.remove(); annotationDrag = null; return;
+  annotationLayer.addEventListener('pointerup', (event) => {
+    if (!annotationDrag || event.pointerId !== annotationDrag.pointerId) return;
+    const drag = annotationDrag; const end = annotationPoint(event);
+    annotationDraftElement?.remove(); annotationDraftElement = null; annotationDrag = null;
+    createAnnotationRecord(drag.type, drag.start, end);
+  });
+  annotationLayer.addEventListener('pointercancel', (event) => {
+    if (!annotationDrag || event.pointerId !== annotationDrag.pointerId) return;
+    annotationDraftElement?.remove(); annotationDraftElement = null; annotationDrag = null;
+    renderAnnotationShapes();
+  });
+  $('[data-studio-clear-annotations]').addEventListener('click', () => {
+    annotationRecords = []; selectedAnnotationId = null; nextAnnotationNumber = 1; invalidateInstructions(); renderAnnotations(); scheduleDraftSave();
+  });
+
+  $('[data-studio-generate-instructions]').addEventListener('click', () => {
+    invalidateInstructions();
+    if (annotationRecords.length === 0) { setSaveState('請先建立至少一個標註', true); return; }
+    const incomplete = annotationRecords.find((record) => record.text.trim() === '');
+    if (incomplete) {
+      selectAnnotation(incomplete.annotationId, { focus: true, scroll: true });
+      setSaveState(`請先填寫標註 ${incomplete.number} 的修改說明`, true);
+      return;
     }
-    const geometry = {
-      x: (parseFloat(box.style.left) || 0) / annotationLayer.clientWidth,
-      y: (parseFloat(box.style.top) || 0) / annotationLayer.clientHeight,
-      width: width / annotationLayer.clientWidth,
-      height: height / annotationLayer.clientHeight
-    };
-    box.dataset.geometry = JSON.stringify(geometry);
-    box.style.left = `${geometry.x * 100}%`; box.style.top = `${geometry.y * 100}%`;
-    box.style.width = `${geometry.width * 100}%`; box.style.height = `${geometry.height * 100}%`;
-    annotationCount += 1; $('[data-studio-annotation-count]').textContent = `${annotationCount} 個標註`; $('[data-studio-annotation-text]').focus(); annotationDrag = null; scheduleDraftSave();
+    generatedInstructionPayload = buildInstructionPayload();
+    generatedInstructionText = buildInstructionText(generatedInstructionPayload);
+    $('[data-studio-instruction-output]').value = generatedInstructionText;
+    $$('[data-studio-copy-instructions],[data-studio-download-instructions],[data-studio-download-json]').forEach((button) => { button.disabled = false; });
+    setSaveState(`已產生 ${annotationRecords.length} 筆編號修改指令`);
   });
-  $('[data-studio-save-annotation]').addEventListener('click', () => { const box = annotationLayer.querySelector('.studio-annotation-box:last-child'); const input = $('[data-studio-annotation-text]'); if (box && input.value.trim()) { box.dataset.label = input.value.trim().slice(0, 36); input.value = ''; scheduleDraftSave(); } });
-  $('[data-studio-clear-annotations]').addEventListener('click', () => { annotationLayer.replaceChildren(); annotationCount = 0; $('[data-studio-annotation-count]').textContent = '0 個標註'; scheduleDraftSave(); });
+
+  $('[data-studio-copy-instructions]').addEventListener('click', async () => {
+    if (!generatedInstructionText) return;
+    try {
+      await navigator.clipboard.writeText(generatedInstructionText);
+      setSaveState('修改指令已複製');
+    } catch (error) {
+      console.warn('Clipboard copy failed', error);
+      setSaveState('瀏覽器拒絕剪貼簿存取，請改用下載 TXT', true);
+    }
+  });
+  $('[data-studio-download-instructions]').addEventListener('click', () => {
+    if (!generatedInstructionText) return;
+    downloadStudioFile('twwater-html-modification-instructions.txt', generatedInstructionText, 'text/plain;charset=utf-8');
+    setSaveState('修改指令 TXT 已下載');
+  });
+  $('[data-studio-download-json]').addEventListener('click', () => {
+    if (!generatedInstructionPayload) return;
+    downloadStudioFile('twwater-html-modification-instructions.json', JSON.stringify(generatedInstructionPayload, null, 2), 'application/json;charset=utf-8');
+    setSaveState('修改指令 JSON 已下載');
+  });
 
   function inspectElement(event) {
     event.preventDefault(); event.stopPropagation();
@@ -525,10 +815,10 @@
   $('[data-studio-reset]').addEventListener('click', () => {
     if (!window.confirm('確定回到初始範例？瀏覽器草稿與目前大圖會重設。')) return;
     localStorage.removeItem(storageKey); markup = initialMarkup; css = initialCss; htmlCode.value = markup; cssCode.value = css; intentInput.value = '建立一個近滿版、字體清楚的供水監測入口，包含狀態摘要、測站表格與主要操作。';
-    drawHistory = []; clearCanvasSelection(); drawInitialSource(); generatedSource = ''; restoredSourceImage = ''; restoredGeneratedSource = false; restoredAnnotations = []; annotationLayer.replaceChildren(); annotationCount = 0; $('[data-studio-annotation-count]').textContent = '0 個標註'; renderAll(); setMode('source'); updateSteps(0); setSaveState('已回到初始範例');
+    drawHistory = []; clearCanvasSelection(); drawInitialSource(); htmlGenerated = false; generatedSource = ''; restoredSourceImage = ''; restoredGeneratedSource = false; restoredAnnotations = []; annotationNormalizationPending = false; annotationRecords = []; selectedAnnotationId = null; nextAnnotationNumber = 1; invalidateInstructions(); renderAnnotations(); updateGeneratedAvailability(); renderAll(); setMode('source'); updateSteps(0); setSaveState('已回到初始範例');
   });
 
-  window.addEventListener('resize', () => { if (mode === 'compare') scaleCompare(); if (canvasSelection) updateCanvasSelection(); });
-  intentInput.addEventListener('change', saveDraft);
-  restoreDraft(); drawInitialSource(); restoreSourceCanvas(); restoreAnnotationRecords(restoredAnnotations); renderAll(); setMode('source'); updateSteps(0);
+  window.addEventListener('resize', () => { if (mode === 'compare') scaleCompare(); if (canvasSelection) updateCanvasSelection(); if (mode === 'annotate') renderAnnotationShapes(); });
+  intentInput.addEventListener('change', () => { invalidateInstructions(); saveDraft(); });
+  restoreDraft(); drawInitialSource(); const sourceRestoreStarted = restoreSourceCanvas(); restoreAnnotationRecords(restoredAnnotations); if (annotationNormalizationPending && !sourceRestoreStarted) { annotationNormalizationPending = false; saveDraft(); setSaveState('已還原並正規化瀏覽器草稿'); } renderAll(); setMode('source'); updateSteps(0);
 })();

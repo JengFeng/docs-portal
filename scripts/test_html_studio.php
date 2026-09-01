@@ -36,6 +36,19 @@ studio_assert(str_contains($js, "name === 'srcset'") && str_contains($js, "name 
 studio_assert(str_contains($js, '@import') && str_contains($js, 'url\\s*\\('), 'CSS network-resource rejection is missing');
 studio_assert(str_contains($js, 'function updateCanvasSelection') && str_contains($js, "selectionAction = 'move'") && str_contains($js, 'deleteCanvasSelection'), 'select tool must select, move, and delete canvas pixels');
 studio_assert(str_contains($js, "toDataURL('image/webp'") && str_contains($js, 'sourceImage') && str_contains($js, 'restoreSourceCanvas') && str_contains($js, 'annotations:'), 'browser draft must persist source canvas and annotation state');
+studio_assert(substr_count($renderer, 'data-studio-requires-generated') >= 5 && str_contains($renderer, 'data-studio-generation-status'), 'downstream HTML modes must start locked until explicit generation');
+studio_assert(str_contains($js, 'let htmlGenerated') && str_contains($js, 'function updateGeneratedAvailability') && str_contains($js, "if (!htmlGenerated"), 'source-to-generated workflow gate is missing');
+foreach (['data-annotation-tool="rect"','data-annotation-tool="circle"','data-annotation-tool="arrow"','data-annotation-tool="number"','data-studio-annotation-list'] as $token) {
+    studio_assert(str_contains($renderer, $token), 'numbered multi-tool annotation contract missing: ' . $token);
+}
+studio_assert(!str_contains($renderer, 'data-studio-annotation-text'), 'legacy single annotation textarea must be removed');
+studio_assert(str_contains($js, 'let annotationRecords') && str_contains($js, 'function createAnnotationRecord') && str_contains($js, 'function renderAnnotationList') && str_contains($js, 'annotationId'), 'annotation identity/list synchronization is missing');
+studio_assert(str_contains($css, '.studio-annotation-arrow') && str_contains($css, '.studio-annotation-circle') && str_contains($css, '.studio-annotation-number'), 'annotation shape styles are missing');
+foreach (['data-studio-generate-instructions','data-studio-instruction-output','data-studio-copy-instructions','data-studio-download-instructions','data-studio-download-json'] as $token) {
+    studio_assert(str_contains($renderer, $token), 'AI modification instruction action missing: ' . $token);
+}
+studio_assert(str_contains($js, 'function buildInstructionPayload') && str_contains($js, 'function buildInstructionText') && str_contains($js, 'function invalidateInstructions') && str_contains($js, 'function downloadStudioFile'), 'instruction generation/export implementation missing');
+studio_assert(str_contains($js, 'application/json;charset=utf-8') && str_contains($js, 'text/plain;charset=utf-8'), 'instruction downloads must use explicit UTF-8 MIME types');
 studio_assert(!str_contains($js, 'eval(') && !str_contains($js, 'new Function('), 'dynamic script execution is forbidden');
 studio_assert(str_contains($js, 'localStorage') && str_contains($js, 'text/html;charset=utf-8'), 'local draft and HTML download paths missing');
 studio_assert(str_contains($css, '.html-studio-page') && str_contains($css, '@media'), 'scoped responsive studio CSS missing');
