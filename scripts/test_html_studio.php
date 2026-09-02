@@ -27,9 +27,10 @@ studio_assert(str_contains($renderer, 'sandbox="allow-same-origin"'), 'preview i
 foreach (['data-studio-mode="source"','data-studio-mode="compare"','data-studio-mode="preview"','data-studio-mode="annotate"','data-studio-mode="inspect"','data-studio-mode="code"','id="studio-source-canvas"','data-studio-canvas-selection','id="studio-selection-delete"','id="studio-source-compare"','id="studio-html-compare"','id="studio-download-html"'] as $token) {
     studio_assert(str_contains($renderer, $token), 'renderer contract missing: ' . $token);
 }
-foreach (['data-draw-tool="select"','data-draw-tool="pen"','data-draw-tool="rect"','data-draw-tool="text"','studio-image-upload','studio-draw-undo','studio-draw-clear','studio-generate-html'] as $token) {
-    studio_assert(str_contains($renderer, $token), 'drawing tool missing: ' . $token);
+foreach (['data-draw-tool="select"','data-draw-tool="pen"','data-draw-tool="rect"','data-draw-tool="text"','studio-image-upload','studio-html-upload','accept=".html,.htm,text/html"','studio-draw-undo','studio-draw-clear','studio-generate-html'] as $token) {
+    studio_assert(str_contains($renderer, $token), 'drawing/import tool missing: ' . $token);
 }
+studio_assert(str_contains($renderer, 'data-studio-requires-comparison-source'), 'comparison must remain separately gated for HTML-file starts');
 studio_assert(str_contains($js, 'DOMParser') && str_contains($js, 'adoptedStyleSheets'), 'preview must sanitize HTML and apply CSS without weakening CSP');
 studio_assert(str_contains($js, 'function sanitizeCss') && str_contains($js, "default-src 'none'") && str_contains($js, 'form-action'), 'preview and exported HTML must fail closed against authenticated resource requests');
 studio_assert(str_contains($js, "name === 'srcset'") && str_contains($js, "name === 'ping'") && str_contains($js, 'data:image\\/'), 'HTML resource URL allowlist is incomplete');
@@ -51,6 +52,8 @@ studio_assert(str_contains($js, 'function buildInstructionPayload') && str_conta
 studio_assert(str_contains($js, 'application/json;charset=utf-8') && str_contains($js, 'text/plain;charset=utf-8'), 'instruction downloads must use explicit UTF-8 MIME types');
 studio_assert(!str_contains($js, 'eval(') && !str_contains($js, 'new Function('), 'dynamic script execution is forbidden');
 studio_assert(str_contains($js, 'localStorage') && str_contains($js, 'text/html;charset=utf-8'), 'local draft and HTML download paths missing');
+studio_assert(str_contains($js, "entryKind: studioEntryKind") && str_contains($js, "studioEntryKind = 'html'") && str_contains($js, 'extractImportedHtml'), 'HTML-file initial-content state and parser are missing');
+studio_assert(str_contains($js, 'entryOperationGeneration') && str_contains($js, 'operationGeneration !== entryOperationGeneration') && str_contains($js, 'cancelPendingEntryOperation'), 'overlapping HTML/image imports and user edits must be newest-operation-wins');
 studio_assert(str_contains($css, '.html-studio-page') && str_contains($css, '@media'), 'scoped responsive studio CSS missing');
 
 echo "[OK] Independent administrator-only HTML studio contracts passed.\n";

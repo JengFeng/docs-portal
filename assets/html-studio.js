@@ -8,6 +8,7 @@
   const storageKey = 'twwater-html-studio-draft-v1';
   const maxMarkupLength = 250000;
   const maxCssLength = 250000;
+  const maxHtmlFileSize = 512 * 1024;
   const canvas = $('#studio-source-canvas');
   const context = canvas.getContext('2d', { willReadFrequently: true });
   const previewFrame = $('#studio-preview');
@@ -40,15 +41,22 @@
   let annotationCount = 0;
   let generatedSource = '';
   let htmlGenerated = false;
+  let studioEntryKind = 'image';
   let canvasSelection = null;
   let selectionAction = null;
   let draftSaveTimer = null;
   let restoredSourceImage = '';
   let restoredGeneratedSource = false;
+  let restoredEntryKind = 'image';
   let restoredAnnotations = [];
   let annotationNormalizationPending = false;
   let generatedInstructionText = '';
   let generatedInstructionPayload = null;
+  let entryOperationGeneration = 0;
+
+  function cancelPendingEntryOperation() {
+    entryOperationGeneration += 1;
+  }
 
   function setSaveState(text, isError = false) {
     saveState.textContent = text;
@@ -57,14 +65,19 @@
 
   function updateGeneratedAvailability() {
     $$('[data-studio-requires-generated]').forEach((control) => { control.disabled = !htmlGenerated; });
+    $$('[data-studio-requires-comparison-source]').forEach((control) => { control.disabled = !htmlGenerated || studioEntryKind !== 'image'; });
     const status = $('[data-studio-generation-status]');
-    if (status) status.textContent = htmlGenerated
-      ? 'HTML 已產生；比較、預覽與標註功能已解鎖。'
-      : '尚未產生 HTML；比較、預覽與標註功能已鎖定。';
+    if (status) status.textContent = !htmlGenerated
+      ? '尚未產生或匯入 HTML；後續功能已鎖定。'
+      : studioEntryKind === 'html'
+        ? '既有 HTML 已安全匯入；預覽、標註、元件與程式碼已解鎖。因無原始大圖，大圖比較不適用。'
+        : 'HTML 已產生；比較、預覽與標註功能已解鎖。';
   }
 
   function invalidateGeneratedHtml() {
+    cancelPendingEntryOperation();
     htmlGenerated = false;
+    studioEntryKind = 'image';
     generatedSource = '';
     updateGeneratedAvailability();
   }
@@ -103,6 +116,35 @@
       throw error;
     }
     return value;
+  }
+
+  function extractImportedHtml(input) {
+    const source = String(input);
+    const openingStyles = source.match(/<style\b/gi) || [];
+    const closingStyles = source.match(/<\/style\s*>/gi) || [];
+    const styleBlocks = [];
+    const htmlWithoutStyles = source.replace(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (_match, content) => { styleBlocks.push(content); return ''; });
+    if (openingStyles.length !== closingStyles.length || styleBlocks.length !== openingStyles.length) {
+      const error = new Error('Imported HTML has malformed style blocks.');
+      error.name = 'StudioValidationError';
+      throw error;
+    }
+    const importedCss = styleBlocks.join('\n');
+    const safeCss = sanitizeCss(importedCss);
+    const parser = new DOMParser();
+    const documentValue = parser.parseFromString(htmlWithoutStyles, 'text/html');
+    if (importedCss.length > maxCssLength || documentValue.body.innerHTML.length > maxMarkupLength) {
+      const error = new Error('Imported HTML or CSS exceeds the editor limit.');
+      error.name = 'StudioValidationError';
+      throw error;
+    }
+    const safeMarkup = sanitizeMarkup(documentValue.body.innerHTML);
+    if (safeMarkup.trim() === '') {
+      const error = new Error('Imported HTML has no usable body content.');
+      error.name = 'StudioValidationError';
+      throw error;
+    }
+    return { markup: safeMarkup, css: safeCss };
   }
 
   function applyConstructedStyles(frame, cssText) {
@@ -372,16 +414,16 @@
     renderAnnotations();
   }
 
-  function saveDraft() {
+  function saveDraft(options = {}) {
     try {
       const sourceImage = canvas.toDataURL('image/webp', 0.92);
       if (sourceImage.length > 3500000) throw new Error('Source image exceeds browser draft limit.');
-      const payload = JSON.stringify({ version: 2, markup, css, intent: intentInput.value.slice(0, 4000), sourceImage, hasGeneratedSource: htmlGenerated, annotations: serializeAnnotations() });
+      const payload = JSON.stringify({ version: 2, markup, css, intent: intentInput.value.slice(0, 4000), sourceImage, hasGeneratedSource: htmlGenerated, entryKind: studioEntryKind, annotations: serializeAnnotations() });
       localStorage.setItem(storageKey, payload);
-      setSaveState('瀏覽器草稿已儲存（含起點大圖）');
+      if (!options.preserveStatus) setSaveState('瀏覽器草稿已儲存（含起點大圖）');
     } catch (error) {
       console.warn('HTML studio draft was not stored', error);
-      setSaveState('瀏覽器草稿未儲存', true);
+      if (!options.preserveStatus) setSaveState('瀏覽器草稿未儲存', true);
     }
   }
 
@@ -404,6 +446,7 @@
         if (parsed.version === 2 && typeof parsed.sourceImage === 'string' && parsed.sourceImage.length <= 3500000 && /^data:image\/(?:webp|png|jpeg);base64,[A-Za-z0-9+/=\s]+$/i.test(parsed.sourceImage)) {
           restoredSourceImage = parsed.sourceImage;
           restoredGeneratedSource = parsed.hasGeneratedSource === true;
+          restoredEntryKind = parsed.entryKind === 'html' ? 'html' : 'image';
         }
         restoredAnnotations = Array.isArray(parsed.annotations) ? parsed.annotations : [];
         setSaveState('已還原瀏覽器草稿');
@@ -416,12 +459,15 @@
 
   function restoreSourceCanvas() {
     if (!restoredSourceImage) return false;
+    const operationGeneration = ++entryOperationGeneration;
     const image = new Image();
     image.onload = () => {
+      if (operationGeneration !== entryOperationGeneration) return;
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      generatedSource = restoredGeneratedSource ? restoredSourceImage : '';
+      generatedSource = restoredGeneratedSource && restoredEntryKind === 'image' ? restoredSourceImage : '';
       htmlGenerated = restoredGeneratedSource;
+      studioEntryKind = restoredEntryKind;
       if (generatedSource) sourceCompare.src = generatedSource;
       updateGeneratedAvailability();
       if (annotationNormalizationPending) {
@@ -430,7 +476,7 @@
         setSaveState('已還原並正規化瀏覽器草稿（含起點大圖）');
       } else setSaveState('已還原瀏覽器草稿（含起點大圖）');
     };
-    image.onerror = () => { localStorage.removeItem(storageKey); setSaveState('起點大圖草稿無法還原', true); };
+    image.onerror = () => { if (operationGeneration !== entryOperationGeneration) return; localStorage.removeItem(storageKey); setSaveState('起點大圖草稿無法還原', true); };
     image.src = restoredSourceImage;
     return true;
   }
@@ -608,14 +654,61 @@
     const file = event.target.files && event.target.files[0];
     event.target.value = '';
     if (!file) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) { setSaveState('圖片必須是 PNG／JPEG／WebP，且不超過 8 MiB', true); return; }
+    const operationGeneration = ++entryOperationGeneration;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      window.clearTimeout(draftSaveTimer); draftSaveTimer = null; saveDraft({ preserveStatus: true });
+      setSaveState('圖片必須是 PNG／JPEG／WebP，且不超過 8 MiB', true); return;
+    }
     try {
       const image = await createImageBitmap(file);
-      if (image.width > 4096 || image.height > 4096) { image.close(); setSaveState('圖片尺寸不可超過 4096 × 4096', true); return; }
+      if (operationGeneration !== entryOperationGeneration) { image.close(); return; }
+      if (image.width > 4096 || image.height > 4096) {
+        image.close(); window.clearTimeout(draftSaveTimer); draftSaveTimer = null; saveDraft({ preserveStatus: true });
+        setSaveState('圖片尺寸不可超過 4096 × 4096', true); return;
+      }
       saveDrawState(); context.fillStyle = '#fff'; context.fillRect(0, 0, 1200, 675); clearCanvasSelection();
       const scale = Math.min(1200 / image.width, 675 / image.height); const width = image.width * scale; const height = image.height * scale;
       context.drawImage(image, (1200 - width) / 2, (675 - height) / 2, width, height); image.close(); invalidateGeneratedHtml(); scheduleDraftSave(); setSaveState('圖片已放入起點大圖');
-    } catch (error) { console.warn('HTML studio image decode failed', error); setSaveState('圖片無法解碼', true); }
+    } catch (error) {
+      if (operationGeneration !== entryOperationGeneration) return;
+      window.clearTimeout(draftSaveTimer); draftSaveTimer = null; saveDraft({ preserveStatus: true });
+      console.warn('HTML studio image decode failed', error); setSaveState('圖片無法解碼', true);
+    }
+  });
+
+  $('#studio-html-upload').addEventListener('change', async (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    const operationGeneration = ++entryOperationGeneration;
+    if (!/\.html?$/i.test(file.name) || file.size > maxHtmlFileSize) {
+      window.clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+      saveDraft({ preserveStatus: true });
+      setSaveState('HTML 檔必須是 .html／.htm，且不超過 512 KiB', true);
+      return;
+    }
+    window.clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+    const previousMarkup = markup; const previousCss = css;
+    try {
+      const importedText = await file.text();
+      if (operationGeneration !== entryOperationGeneration) return;
+      const imported = extractImportedHtml(importedText);
+      markup = imported.markup; css = imported.css;
+      if (!renderAll()) throw new Error('Imported HTML could not be rendered safely.');
+      htmlCode.value = markup; cssCode.value = css;
+      htmlGenerated = true; studioEntryKind = 'html'; generatedSource = ''; sourceCompare.removeAttribute('src');
+      annotationRecords = []; selectedAnnotationId = null; nextAnnotationNumber = 1; invalidateInstructions(); renderAnnotations();
+      updateGeneratedAvailability(); setMode('preview'); saveDraft();
+      setSaveState(`HTML 檔「${file.name.slice(0, 120)}」已安全匯入並設為初始內容`);
+    } catch (error) {
+      if (operationGeneration !== entryOperationGeneration) return;
+      markup = previousMarkup; css = previousCss; htmlCode.value = markup; cssCode.value = css; renderAll();
+      saveDraft({ preserveStatus: true });
+      console.warn('HTML studio import rejected', error);
+      setSaveState('HTML 檔無法匯入：請移除外部 CSS 資源、超量內容或不安全語法', true);
+    }
   });
 
   function updateSteps(activeIndex) {
@@ -624,7 +717,12 @@
 
   function setMode(nextMode) {
     if (!htmlGenerated && nextMode !== 'source') {
-      setSaveState('請先完成起點大圖，再按「產生初始 HTML 並開始比較」。', true);
+      setSaveState('請先完成起點大圖並產生 HTML，或直接匯入既有 HTML 檔案。', true);
+      updateGeneratedAvailability();
+      return;
+    }
+    if (nextMode === 'compare' && studioEntryKind !== 'image') {
+      setSaveState('匯入的 HTML 沒有原始大圖基準，請使用真實預覽、標註或程式碼模式。', true);
       updateGeneratedAvailability();
       return;
     }
@@ -661,9 +759,11 @@
   }));
 
   $('#studio-generate-html').addEventListener('click', () => {
+    cancelPendingEntryOperation();
     generatedSource = canvas.toDataURL('image/png');
     sourceCompare.src = generatedSource;
     htmlGenerated = true;
+    studioEntryKind = 'image';
     updateGeneratedAvailability();
     renderAll(); setMode('compare'); saveDraft();
   });
@@ -787,12 +887,14 @@
     input.disabled = !editable; input.value = editable ? selectedElement.textContent : ''; $('[data-studio-apply-text]').disabled = !editable;
   }
   $('[data-studio-apply-text]').addEventListener('click', () => {
+    cancelPendingEntryOperation();
     if (!selectedElement || selectedElement.children.length !== 0) return;
     selectedElement.textContent = $('[data-studio-quick-text]').value.slice(0, 500);
     markup = sanitizeMarkup(previewFrame.contentDocument.body.innerHTML); htmlCode.value = markup; saveDraft(); renderAll(); setMode('inspect');
   });
 
   $('[data-studio-apply-code]').addEventListener('click', () => {
+    cancelPendingEntryOperation();
     const proposedMarkup = htmlCode.value.slice(0, maxMarkupLength); const proposedCss = cssCode.value.slice(0, maxCssLength);
     const previousMarkup = markup; const previousCss = css;
     markup = sanitizeMarkup(proposedMarkup); css = proposedCss;
@@ -814,11 +916,14 @@
 
   $('[data-studio-reset]').addEventListener('click', () => {
     if (!window.confirm('確定回到初始範例？瀏覽器草稿與目前大圖會重設。')) return;
+    cancelPendingEntryOperation();
     localStorage.removeItem(storageKey); markup = initialMarkup; css = initialCss; htmlCode.value = markup; cssCode.value = css; intentInput.value = '建立一個近滿版、字體清楚的供水監測入口，包含狀態摘要、測站表格與主要操作。';
-    drawHistory = []; clearCanvasSelection(); drawInitialSource(); htmlGenerated = false; generatedSource = ''; restoredSourceImage = ''; restoredGeneratedSource = false; restoredAnnotations = []; annotationNormalizationPending = false; annotationRecords = []; selectedAnnotationId = null; nextAnnotationNumber = 1; invalidateInstructions(); renderAnnotations(); updateGeneratedAvailability(); renderAll(); setMode('source'); updateSteps(0); setSaveState('已回到初始範例');
+    drawHistory = []; clearCanvasSelection(); drawInitialSource(); htmlGenerated = false; studioEntryKind = 'image'; generatedSource = ''; restoredSourceImage = ''; restoredGeneratedSource = false; restoredEntryKind = 'image'; restoredAnnotations = []; annotationNormalizationPending = false; annotationRecords = []; selectedAnnotationId = null; nextAnnotationNumber = 1; invalidateInstructions(); renderAnnotations(); updateGeneratedAvailability(); renderAll(); setMode('source'); updateSteps(0); setSaveState('已回到初始範例');
   });
 
   window.addEventListener('resize', () => { if (mode === 'compare') scaleCompare(); if (canvasSelection) updateCanvasSelection(); if (mode === 'annotate') renderAnnotationShapes(); });
+  htmlCode.addEventListener('input', cancelPendingEntryOperation);
+  cssCode.addEventListener('input', cancelPendingEntryOperation);
   intentInput.addEventListener('change', () => { invalidateInstructions(); saveDraft(); });
   restoreDraft(); drawInitialSource(); const sourceRestoreStarted = restoreSourceCanvas(); restoreAnnotationRecords(restoredAnnotations); if (annotationNormalizationPending && !sourceRestoreStarted) { annotationNormalizationPending = false; saveDraft(); setSaveState('已還原並正規化瀏覽器草稿'); } renderAll(); setMode('source'); updateSteps(0);
 })();
