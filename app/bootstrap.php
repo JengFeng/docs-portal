@@ -131,10 +131,17 @@ function portal_config(bool $requireDocumentRoot = true): array
     if (($config['rate_key'] ?? '') !== '' && strlen((string) $config['rate_key']) < 32) {
         $missing[] = 'PORTAL_RATE_KEY';
     }
-    if ($requireDocumentRoot && ($config['document_root'] ?? '') !== ''
-        && !portal_path_is_outside_application_root((string) $config['document_root'])
-        && !portal_document_root_is_allowed((string) $config['document_root'])) {
-        $missing[] = 'PORTAL_DOCUMENT_ROOT';
+    $directSyncMode = getenv('PORTAL_DIRECT_SYNC_MODE') === '1';
+    $directSyncSourceValue = getenv('PORTAL_DIRECT_SYNC_SOURCE_ROOT');
+    $directSyncSource = $directSyncSourceValue === false ? '' : trim((string) $directSyncSourceValue);
+    $config['direct_sync_mode'] = $directSyncMode;
+    $config['direct_sync_source_root'] = $directSyncSource;
+    $config['direct_sync_stable_seconds'] = PORTAL_BRIDGE_RECONCILE_DEFAULT_SECONDS;
+    if ($requireDocumentRoot && ($config['document_root'] ?? '') !== '') {
+        $validRoot = $directSyncMode
+            ? portal_direct_sync_root_is_allowed((string) $config['document_root'], $directSyncSource)
+            : portal_document_root_is_allowed((string) $config['document_root']);
+        if (!$validRoot) $missing[] = 'PORTAL_DOCUMENT_ROOT';
     }
     if (($config['session_save_path'] ?? '') !== '' && !portal_path_is_outside_application_root((string) $config['session_save_path'])) {
         $missing[] = 'PORTAL_SESSION_SAVE_PATH';

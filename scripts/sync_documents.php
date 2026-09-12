@@ -29,6 +29,10 @@ try {
         exit(2);
     }
 } catch (Throwable $exception) {
-    fwrite(STDERR, "Document sync failed. Check the protected environment and server logs.\n");
+    if (in_array('--diagnostic', $argv, true)) {
+        fwrite(STDERR, get_class($exception) . ': ' . $exception->getMessage() . PHP_EOL);
+    } else {
+        fwrite(STDERR, "Document sync failed. Check the protected environment and server logs.\n");
+    }
     exit(1);
 }

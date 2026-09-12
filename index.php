@@ -588,8 +588,8 @@ function portal_render_document_library(PDO $database, array $user): void
     $phases = portal_get_ssdlc_phases($database);
     $types = portal_get_document_types($database);
     $content = '<section class="hero hero-row"><div><p class="eyebrow">LIVE DOCUMENT LIBRARY</p><h1>即時文件庫</h1>'
-        . '<p>本網站目前直接讀取受保護的正式文件庫；僅由管理者於伺服器完成放檔並重新索引，網站不提供上傳。Google Drive舊入口與Bridge暫時保留，待後續評估。</p></div>'
-        . '<div class="hero-actions"><span class="live-indicator"><i aria-hidden="true"></i> 受保護讀取</span>'
+        . '<p>本網站自動讀取同步的 document-library；每 60 秒安全掃描一次，穩定的新增、更新與刪除會自動反映。所有開啟與下載都必須先登入並通過授權。</p></div>'
+        . '<div class="hero-actions"><span class="live-indicator"><i aria-hidden="true"></i> 自動同步索引</span>'
         . (portal_is_admin($user) ? '<a class="secondary-button" href="' . portal_url('admin') . '">管理後台</a>' : '') . '</div></section>';
     $content .= portal_render_view_tabs($filters);
     $content .= portal_render_library_filters($filters, $phases, $types);
@@ -855,6 +855,8 @@ function portal_render_document_type_tags(array $document): string
 
 function portal_render_document_row(array $document, ?string $focusStage, bool $isAdmin, array $user = []): string
 {
+    // Files may be synchronized from an external desktop client, but every
+    // view/download still passes through the authenticated Portal route.
     $link = portal_url('view', ['id' => (string) $document['public_id']]);
     $status = $isAdmin ? '<span class="status-chip ' . portal_e((string) $document['status_code']) . '">' . portal_e((string) $document['status_code']) . '</span>' : '';
     $relativePath = (string) ($document['relative_path'] ?? '');
