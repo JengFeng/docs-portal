@@ -5,6 +5,7 @@ require __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'bootstrap
 require __DIR__ . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'staging_retirement.php';
 
 portal_enforce_https();
+portal_enforce_canonical_application_path();
 portal_send_security_headers(portal_feedback_embed_request_allowed($_GET,(string)($_SERVER['REQUEST_METHOD']??'GET')));
 $config = portal_config();
 if (!$config['ready']) {

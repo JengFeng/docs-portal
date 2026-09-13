@@ -530,9 +530,12 @@ function portal_current_user(PDO $database): ?array
     $lastSeen = isset($_SESSION['last_seen_at']) ? (int) $_SESSION['last_seen_at'] : 0;
     $authenticatedAt = isset($_SESSION['authenticated_at']) ? (int) $_SESSION['authenticated_at'] : 0;
     $now = time();
-    if (
-        $userId <= 0 || $lastSeen <= 0 || $authenticatedAt <= 0
-        || $now - $lastSeen > PORTAL_IDLE_TIMEOUT_SECONDS
+    if ($userId <= 0 || $lastSeen <= 0 || $authenticatedAt <= 0) {
+        // A new anonymous session already has a CSRF token. Regenerating it
+        // here invalidates the token rendered by the login form before POST.
+        return null;
+    }
+    if ($now - $lastSeen > PORTAL_IDLE_TIMEOUT_SECONDS
         || $now - $authenticatedAt > PORTAL_ABSOLUTE_TIMEOUT_SECONDS
     ) {
         portal_reset_anonymous_session();
@@ -674,7 +677,10 @@ function portal_register_ip_failure(PDO $database, array $config): bool
              FROM dbo.auth_rate_limits WITH (UPDLOCK, HOLDLOCK)
              WHERE scope_code = ? AND scope_key = ?'
         );
-        $select->execute([-PORTAL_RATE_WINDOW_MINUTES, $scope, $key]);
+        $select->bindValue(1, -PORTAL_RATE_WINDOW_MINUTES, PDO::PARAM_INT);
+        $select->bindValue(2, $scope, PDO::PARAM_STR);
+        $select->bindValue(3, $key, PDO::PARAM_STR);
+        $select->execute();
         $row = $select->fetch();
         $willLock = false;
         if ($row === false) {
@@ -701,7 +707,12 @@ function portal_register_ip_failure(PDO $database, array $config): bool
                      updated_at = SYSUTCDATETIME()
                  WHERE scope_code = ? AND scope_key = ?'
             );
-            $update->execute([$newCount, $willLock ? 1 : 0, PORTAL_IP_LOCK_MINUTES, $scope, $key]);
+            $update->bindValue(1, $newCount, PDO::PARAM_INT);
+            $update->bindValue(2, $willLock ? 1 : 0, PDO::PARAM_INT);
+            $update->bindValue(3, PORTAL_IP_LOCK_MINUTES, PDO::PARAM_INT);
+            $update->bindValue(4, $scope, PDO::PARAM_STR);
+            $update->bindValue(5, $key, PDO::PARAM_STR);
+            $update->execute();
         }
         $database->commit();
         return $willLock;
@@ -1497,17 +1508,13 @@ function portal_relative_path_from_file(string $root, SplFileInfo $file): ?strin
     return str_replace(DIRECTORY_SEPARATOR, '/', substr($absolute, strlen(rtrim($root, '\\/')) + 1));
 }
 
-function portal_document_path_component_is_excluded(string $name): bool
+function portal_document_path_component_is_excluded(string $name, bool $directSyncMode = false): bool
 {
-    if ($name === '' || str_starts_with($name, '.') || str_starts_with($name, '~$')) {
-        return true;
-    }
-    return in_array(strtolower($name), [
-        'node_modules',
-        'vendor',
-        'tmp',
-        '_pptx_build_tool',
-    ], true);
+    if ($name === '' || str_starts_with($name, '~$')) return true;
+    $excluded = $directSyncMode
+        ? ['.discord_log', '.discord_uploads', '.npm-cache', '.ppt_build', '.pptx_build_tool', '_pptx_build_tool', '.transcription_tmp', 'maintenance-backups', 'tmp', 'verification', '供水監測雛型網站']
+        : ['node_modules', 'vendor', 'tmp', '_pptx_build_tool'];
+    return in_array(strtolower($name), array_map('strtolower', $excluded), true);
 }
 
 function portal_scan_document_source(array $config): array
