@@ -1,0 +1,5 @@
+<?php
+declare(strict_types=1);
+require_once dirname(__DIR__).'/app/portal_state.php';require_once dirname(__DIR__).'/app/sqlite_accounts.php';
+function rename_assert(bool $ok,string $message):void{if(!$ok)throw new RuntimeException($message);}
+$p='C:\\TWWATER\\runtime\\portal-state\\rename-contract.sqlite';@unlink($p);@unlink($p.'-wal');@unlink($p.'-shm');try{$db=portal_open_state_database_at($p);portal_state_initialize_schema($db);$admin=portal_initialize_first_admin($db,'old-admin','Old Admin','Initial-Password-2026');$renamed=portal_rename_account_username($db,null,(int)$admin['user_id'],'gisadmin');rename_assert($renamed['username']==='gisadmin','Rename must read back the new username.');$event=(string)$db->query("SELECT event_type FROM auth_management_audit_events ORDER BY event_id DESC LIMIT 1")->fetchColumn();rename_assert($event==='account_username_renamed','Rename must append an audit event.');}finally{unset($db);@unlink($p);@unlink($p.'-wal');@unlink($p.'-shm');}echo "ACCOUNT_USERNAME_RENAME_SERVICE_OK\n";

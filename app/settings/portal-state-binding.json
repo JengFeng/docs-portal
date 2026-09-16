@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "sqlite_path": "C:\\TWWATER\\runtime\\portal-state\\twwater-portal.sqlite",
+  "backup_root": "C:\\TWWATER\\runtime\\database-backups\\sqlite",
+  "google_login_enabled": false
+}
