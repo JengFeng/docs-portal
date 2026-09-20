@@ -1,0 +1,5 @@
+<?php
+declare(strict_types=1);
+require_once dirname(__DIR__).'/app/portal_state.php';require_once dirname(__DIR__).'/app/sqlite_accounts.php';
+function enabled_post_assert(bool $ok,string $message):void{if(!$ok)throw new RuntimeException($message);}
+$p='C:\\TWWATER\\runtime\\portal-state\\enabled-post-contract.sqlite';@unlink($p);@unlink($p.'-wal');@unlink($p.'-shm');try{$db=portal_open_state_database_at($p);portal_state_initialize_schema($db);$admin=portal_initialize_first_admin($db,'root-admin','Root','Initial-Password-2026');$reader=portal_create_account($db,(int)$admin['user_id'],['username'=>'reader-one','display_name'=>'Reader','role_code'=>'reader','login_mode'=>'local_only','password'=>'Reader-Password-2026','google_email'=>'']);$updated=portal_update_account($db,(int)$admin['user_id'],(int)$reader['user_id'],['display_name'=>'Reader Updated','role_code'=>'reader','login_mode'=>'local_only','google_email'=>'','is_enabled'=>'1']);enabled_post_assert((int)$updated['is_enabled']===1,'HTML checkbox value 1 must keep an account enabled.');}finally{unset($db);@unlink($p);@unlink($p.'-wal');@unlink($p.'-shm');}echo "ACCOUNT_ENABLED_POST_CONTRACT_OK\n";

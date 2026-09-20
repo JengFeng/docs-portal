@@ -43,6 +43,8 @@ __pycache__/
 .uv-cache/
 dist/
 build/
+**/bin/
+**/obj/
 
 # IDE / OS files
 .vscode/

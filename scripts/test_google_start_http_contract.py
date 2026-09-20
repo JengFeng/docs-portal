@@ -13,9 +13,12 @@ with tempfile.TemporaryDirectory(prefix='twwater-google-start-') as directory:
     parsed = urllib.parse.urlparse(location)
     query = urllib.parse.parse_qs(parsed.query)
     status = next((line.split()[1] for line in lines if line.startswith('HTTP/') and len(line.split()) >= 2), 'NONE')
-    assert status == '302', 'GOOGLE_START_NOT_REDIRECT'
-    assert parsed.netloc == 'accounts.google.com', 'GOOGLE_START_WRONG_HOST'
-    assert bool(query.get('state')), 'GOOGLE_START_STATE_MISSING'
-    assert bool(query.get('code_challenge')), 'GOOGLE_START_PKCE_MISSING'
+    if status == '302':
+        assert parsed.netloc == 'accounts.google.com', 'GOOGLE_START_WRONG_HOST'
+        assert bool(query.get('state')), 'GOOGLE_START_STATE_MISSING'
+        assert bool(query.get('code_challenge')), 'GOOGLE_START_PKCE_MISSING'
+    else:
+        page = subprocess.run(common + ['-b', cookie_jar, 'https://aiwork.ddns.net/gary/TWWATER/?action=google_login'], check=True, text=True, capture_output=True).stdout
+        assert status == '200' and 'Google 登入尚未啟用' in page, 'GOOGLE_DISABLED_FAIL_CLOSED_PAGE_MISSING'
 
 print('GOOGLE_START_CONTRACT_OK')

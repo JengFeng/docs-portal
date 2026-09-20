@@ -1,209 +1,94 @@
 (() => {
-  const allowed = ['small', 'medium', 'large'];
-  const storageKey = 'twwater-font-size';
-  const controls = Array.from(document.querySelectorAll('[data-font-size-control]'));
-  const apply = (requested, persist = true) => {
-    const size = allowed.includes(requested) ? requested : 'large';
-    document.documentElement.dataset.fontSize = size;
-    controls.forEach((control) => control.querySelectorAll('[data-font-size]').forEach((button) => button.setAttribute('aria-pressed', button.dataset.fontSize === size ? 'true' : 'false')));
-    if (persist) { try { window.localStorage.setItem(storageKey, size); } catch (_) {} }
-  };
-  let saved = 'large';
-  try { saved = window.localStorage.getItem(storageKey) || 'large'; } catch (_) {}
-  apply(saved, false);
-  controls.forEach((control) => control.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-font-size]');
-    if (button instanceof HTMLButtonElement) apply(button.dataset.fontSize || 'large');
-  }));
-})();
-
-document.addEventListener('change', (event) => {
-  const select = event.target;
-  if (!(select instanceof HTMLSelectElement) || select.name !== 'sort') return;
-  const form = select.form;
-  if (!(form instanceof HTMLFormElement) || !form.matches('[data-library-sort-menu]')) return;
-  const panel = select.closest('details');
-  if (panel instanceof HTMLDetailsElement) panel.open = false;
-  form.requestSubmit();
-});
-
-document.addEventListener('submit', (event) => {
-  const form = event.target;
-  if (!(form instanceof HTMLFormElement)) return;
-  if (form.matches('[data-staging-upload-form]')) return;
-  for (const modeControl of form.querySelectorAll('[data-batch-mode]')) {
-    if (!(modeControl instanceof HTMLSelectElement) || modeControl.value === 'unchanged') continue;
-    const targetId = modeControl.dataset.target;
-    const target = targetId ? document.getElementById(targetId) : null;
-    if (!(target instanceof HTMLFieldSetElement) || target.querySelector('input[type="checkbox"]:checked')) continue;
-    event.preventDefault();
-    const panel = modeControl.closest('details');
-    if (panel instanceof HTMLDetailsElement) panel.open = true;
-    const propertyName = modeControl.name === 'phase_mode' ? 'SSDLC 階段角色' : '文件種類';
-    window.alert(`請先勾選至少一個要套用的${propertyName}。`);
-    modeControl.focus();
-    return;
-  }
-  const message = form.dataset.confirm;
-  if (message && !window.confirm(message)) {
-    event.preventDefault();
-    return;
-  }
-  const submitter = event.submitter;
-  if (submitter instanceof HTMLButtonElement) {
-    submitter.disabled = true;
-    submitter.setAttribute('aria-busy', 'true');
-    submitter.dataset.originalLabel = submitter.textContent || '';
-    submitter.textContent = '處理中…';
-  }
-});
-
-(() => {
-  const selectAll = document.querySelector('[data-select-all-documents]');
-  const documentCheckboxes = Array.from(document.querySelectorAll('[data-document-checkbox]'));
-  const selectedCount = document.querySelector('[data-selected-document-count]');
-  if (!(selectAll instanceof HTMLInputElement) || documentCheckboxes.length === 0) return;
-
-  const refreshSelection = () => {
-    const checked = documentCheckboxes.filter((checkbox) => checkbox instanceof HTMLInputElement && checkbox.checked).length;
-    selectAll.checked = checked === documentCheckboxes.length;
-    selectAll.indeterminate = checked > 0 && checked < documentCheckboxes.length;
-    if (selectedCount instanceof HTMLElement) selectedCount.textContent = `已選 ${checked} 件`;
-  };
-
-  selectAll.addEventListener('change', () => {
-    documentCheckboxes.forEach((checkbox) => {
-      if (checkbox instanceof HTMLInputElement) checkbox.checked = selectAll.checked;
+  'use strict';
+  const tree = document.querySelector('[data-explorer-tree]');
+  const input = document.querySelector('[data-explorer-search]');
+  const clear = document.querySelector('[data-explorer-search-clear]');
+  const resultPanel = document.querySelector('[data-explorer-search-results]');
+  const resultBody = document.querySelector('[data-explorer-search-result-body]');
+  if (!tree || !input || !clear || !resultPanel || !resultBody) return;
+  const key = 'twwater-explorer-folder';
+  const panels = [...document.querySelectorAll('[data-explorer-content]')];
+  const buttons = [...document.querySelectorAll('[data-explorer-folder]')];
+  const documents = [...document.querySelectorAll('[data-explorer-document]')];
+  const portalRenderBreadcrumb = (target) => {
+    const breadcrumb = target.querySelector('[data-explorer-breadcrumb]');
+    if (!breadcrumb) return;
+    breadcrumb.querySelectorAll('[data-explorer-folder]').forEach((button) => {
+      button.classList.toggle('is-current', button.dataset.explorerFolder === target.dataset.explorerContent);
     });
-    refreshSelection();
-  });
-  documentCheckboxes.forEach((checkbox) => checkbox.addEventListener('change', refreshSelection));
-  refreshSelection();
-})();
-
-(() => {
-  const labels = {
-    unchanged: '維持不變',
-    replace: '取代',
-    add: '新增',
-    remove: '移除',
   };
-  document.querySelectorAll('[data-batch-mode]').forEach((control) => {
-    if (!(control instanceof HTMLSelectElement)) return;
-    const targetId = control.dataset.target;
-    const target = targetId ? document.getElementById(targetId) : null;
-    const panel = control.closest('[data-batch-panel]');
-    const summaryLabel = panel?.querySelector('[data-batch-mode-label]');
-    const refreshMode = () => {
-      const mode = Object.hasOwn(labels, control.value) ? control.value : 'unchanged';
-      if (target instanceof HTMLFieldSetElement) target.disabled = mode === 'unchanged';
-      if (summaryLabel instanceof HTMLElement) summaryLabel.textContent = labels[mode];
-    };
-    control.addEventListener('change', refreshMode);
-    refreshMode();
-  });
+  const selectFolder = (id, persist = true) => {
+    const target = panels.find((panel) => panel.dataset.explorerContent === id) || panels.find((panel) => panel.dataset.explorerContent === 'root');
+    panels.forEach((panel) => { panel.hidden = panel !== target; });
+    resultPanel.hidden = true;
+    buttons.forEach((button) => button.classList.toggle('is-selected', button.dataset.explorerFolder === target.dataset.explorerContent));
+    if (persist) { try { localStorage.setItem(key, target.dataset.explorerContent); } catch (_) {} }
+    portalRenderBreadcrumb(target);
+  };
+  buttons.forEach((button) => button.addEventListener('click', () => selectFolder(button.dataset.explorerFolder || 'root')));
+  const showSearch = () => {
+    const query = input.value.trim().toLocaleLowerCase();
+    if (!query) { selectFolder((() => { try { return localStorage.getItem(key) || 'root'; } catch (_) { return 'root'; } })(), false); return; }
+    panels.forEach((panel) => { panel.hidden = true; }); resultPanel.hidden = false; resultBody.replaceChildren();
+    const matches = documents.filter((row) => `${row.dataset.name || ''} ${row.dataset.path || ''}`.toLocaleLowerCase().includes(query));
+    if (!matches.length) { resultBody.innerHTML = '<tr><td colspan="5">找不到符合的文件。</td></tr>'; return; }
+    matches.forEach((row) => { const source = row.querySelector('a'); const cells = [...row.children].map((cell) => cell.textContent.trim()); const tr = document.createElement('tr'); tr.innerHTML = `<td></td><td></td><td></td><td></td><td></td>`; const link = source.cloneNode(true); tr.children[0].replaceChildren(link); tr.children[1].textContent = cells[1] || ''; tr.children[2].textContent = row.dataset.path || ''; tr.children[3].textContent = cells[2] || ''; tr.children[4].textContent = cells[3] || ''; resultBody.appendChild(tr); });
+  };
+  input.addEventListener('input', showSearch);
+  clear.addEventListener('click', () => { input.value = ''; showSearch(); input.focus(); });
+  let saved = 'root'; try { saved = localStorage.getItem(key) || 'root'; } catch (_) {} selectFolder(saved, false);
 })();
 
 (() => {
-  const page = document.querySelector('[data-operation-status-url]');
-  if (!(page instanceof HTMLElement)) return;
-  const statusUrl = page.dataset.operationStatusUrl;
-  if (!statusUrl) return;
-
-  const terminalStates = new Set(['preview-ready', 'completed', 'conflict', 'failed', 'cancelled']);
-  if (terminalStates.has(page.dataset.operationStatus || '')) return;
-
-  let failures = 0;
-  const poll = async () => {
+  'use strict';
+  const panel = document.querySelector('[data-health-poll-url]');
+  if (!panel) return;
+  const refresh = async () => {
     try {
-      const response = await fetch(statusUrl, {
-        credentials: 'same-origin',
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
+      const response = await fetch(panel.dataset.healthPollUrl || '', { credentials: 'same-origin' });
+      if (!response.ok) return;
+      const data = await response.json();
+      panel.querySelectorAll('[data-health]').forEach((node) => {
+        const key = node.dataset.health || '';
+        if (Object.prototype.hasOwnProperty.call(data, key)) node.textContent = String(data[key]);
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const result = await response.json();
-      failures = 0;
-      if (result.status !== page.dataset.operationStatus || result.terminal === true) {
-        window.location.reload();
-        return;
-      }
-    } catch (error) {
-      failures += 1;
-      if (failures >= 5) return;
-    }
-    window.setTimeout(poll, 2500);
+    } catch (_) {}
   };
-  window.setTimeout(poll, 2500);
+  setInterval(refresh, 60000);
 })();
 
 (() => {
-  const form = document.querySelector('[data-staging-upload-form]');
-  if (!(form instanceof HTMLFormElement)) return;
-  const fileInput = form.elements.namedItem('document_file');
-  const targetInput = form.elements.namedItem('target_document_id');
-  const changeRequestInput = form.elements.namedItem('change_request_id');
-  const csrfInput = form.elements.namedItem('csrf_token');
-  const progress = form.querySelector('[data-staging-progress]');
-  const status = form.querySelector('[data-staging-status]');
-  const button = form.querySelector('button[type="submit"]');
-  if (!(fileInput instanceof HTMLInputElement) || !(csrfInput instanceof HTMLInputElement)) return;
-
-  const post = async (url, data) => {
-    const response = await fetch(url, { method: 'POST', body: data, credentials: 'same-origin', headers: { Accept: 'application/json' } });
-    const payload = await response.json().catch(() => ({ ok: false, error: 'INVALID_RESPONSE' }));
-    if (!response.ok || payload.ok !== true) throw new Error(payload.error || `HTTP_${response.status}`);
-    return payload;
-  };
-
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const file = fileInput.files?.[0];
-    if (!(file instanceof File)) return;
-    if (file.size < 1 || file.size > 157286400) {
-      window.alert('單檔大小必須介於 1 byte 到 150 MB。');
-      return;
-    }
-    if (button instanceof HTMLButtonElement) button.disabled = true;
-    if (progress instanceof HTMLProgressElement) { progress.hidden = false; progress.value = 0; }
-    if (status instanceof HTMLElement) status.textContent = '建立私有暫存工作區…';
+  'use strict';
+  const panel = document.querySelector('[data-sync-panel]');
+  if (!panel) return;
+  const form = panel.querySelector('[data-sync-request-form]');
+  const submit = panel.querySelector('[data-sync-submit]');
+  const feedback = panel.querySelector('[data-sync-feedback]');
+  const status = document.querySelector('[data-sync-status]');
+  const currentOperation = document.querySelector('[data-sync-current-operation]');
+  const history = document.querySelector('[data-sync-history]');
+  const lastUpdated = panel.querySelector('[data-sync-last-updated]');
+  if (form && submit && feedback) {
+    form.addEventListener('submit', () => {
+      form.setAttribute('aria-busy', 'true');
+      submit.disabled = true;
+      submit.textContent = '正在送出…';
+      feedback.textContent = '正在送出同步預覽請求，頁面即將更新。';
+    });
+  }
+  const refresh = async () => {
     try {
-      const create = new FormData();
-      create.set('csrf_token', csrfInput.value);
-      create.set('file_name', file.name);
-      create.set('file_size_bytes', String(file.size));
-      if (targetInput instanceof HTMLSelectElement) create.set('target_document_id', targetInput.value);
-      if (changeRequestInput instanceof HTMLInputElement) create.set('change_request_id', changeRequestInput.value);
-      const created = await post(form.dataset.createUrl || '', create);
-      const workspace = created.workspace;
-      const chunkSize = Number(workspace.chunk_size_bytes);
-      const totalChunks = Number(workspace.total_chunks);
-      for (let index = 0; index < totalChunks; index += 1) {
-        if (status instanceof HTMLElement) status.textContent = `上傳分段 ${index + 1} / ${totalChunks}…`;
-        const chunk = new FormData();
-        chunk.set('csrf_token', csrfInput.value);
-        chunk.set('id', workspace.id);
-        chunk.set('index', String(index));
-        chunk.set('chunk', file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize)), `chunk-${index}.bin`);
-        await post(form.dataset.chunkUrl || '', chunk);
-        if (progress instanceof HTMLProgressElement) progress.value = Math.round(((index + 1) / totalChunks) * 90);
-      }
-      if (status instanceof HTMLElement) status.textContent = '驗證檔案並產生預覽…';
-      const finalize = new FormData();
-      finalize.set('csrf_token', csrfInput.value);
-      finalize.set('id', workspace.id);
-      const completed = await post(form.dataset.finalizeUrl || '', finalize);
-      if (progress instanceof HTMLProgressElement) progress.value = 100;
-      window.location.assign(completed.workspace.url);
-    } catch (error) {
-      if (status instanceof HTMLElement) status.textContent = '上傳或預覽失敗，請重新嘗試。';
-      if (button instanceof HTMLButtonElement) button.disabled = false;
+      const response = await fetch(panel.dataset.syncPollUrl || '', { credentials: 'same-origin' });
+      if (!response.ok) throw new Error('sync_poll_failed');
+      const data = await response.json();
+      if (status) status.textContent = `服務狀態：${data.status || 'unknown'}`;
+      if (currentOperation && typeof data.current_html === 'string') currentOperation.innerHTML = data.current_html;
+      if (history && panel.dataset.syncHistoryLive === '1' && data.history_live === true && typeof data.history_html === 'string') history.innerHTML = data.history_html;
+      if (lastUpdated) lastUpdated.textContent = `最後更新：${new Date().toLocaleTimeString()}`;
+      if (feedback && form?.getAttribute('aria-busy') !== 'true') feedback.textContent = '';
+    } catch (_) {
+      if (feedback) feedback.textContent = '同步狀態暫時無法更新；系統不會在狀態不明時自動執行同步。';
     }
-  });
-})();
-
-(() => {
-  const pendingCommit = document.querySelector('[data-staging-refresh]');
-  if (!(pendingCommit instanceof HTMLElement)) return;
-  window.setTimeout(() => window.location.reload(), 2500);
+  };
+  setInterval(refresh, 5000);
 })();

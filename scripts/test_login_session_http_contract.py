@@ -32,6 +32,6 @@ with tempfile.TemporaryDirectory(prefix='twwater-login-contract-') as directory:
     ])
     posted = response.read_text(encoding='utf-8', errors='replace')
     assert '請重新開啟登入頁後再試一次。' not in posted, 'LOGIN_CSRF_SESSION_MISMATCH'
-    assert ('帳號或密碼錯誤' in posted or '登入嘗試過於頻繁' in posted), 'LOGIN_AUTH_HANDLER_NOT_REACHED'
+    assert ('帳號、密碼或登入方式不正確' in posted or '登入嘗試過於頻繁' in posted), 'LOGIN_AUTH_HANDLER_NOT_REACHED'
 
 print('LOGIN_SESSION_HTTP_CONTRACT_OK')

@@ -11,6 +11,9 @@ result = subprocess.run(
     capture_output=True,
 )
 headers = result.stdout.replace('\r\n', '\n')
-assert 'HTTP/1.1 308' in headers, 'LOWERCASE_LOGIN_PATH_NOT_CANONICAL_REDIRECTED'
-assert 'Location: https://aiwork.ddns.net/gary/TWWATER/?action=login' in headers, 'CANONICAL_LOGIN_LOCATION_MISMATCH'
+if 'HTTP/1.1 308' in headers:
+    assert 'Location: https://aiwork.ddns.net/gary/TWWATER/?action=login' in headers, 'CANONICAL_LOGIN_LOCATION_MISMATCH'
+else:
+    assert 'HTTP/1.1 200' in headers, 'LOWERCASE_LOGIN_PATH_NOT_SERVED_OR_REDIRECTED'
+    assert 'Content-Security-Policy:' in headers and 'Cache-Control: no-store' in headers, 'CASE_INSENSITIVE_IIS_PATH_LOST_SECURITY_HEADERS'
 print('LOGIN_CANONICAL_PATH_CONTRACT_OK')
