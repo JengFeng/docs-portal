@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/app/bootstrap.php';
 require __DIR__ . '/app/admin_pages.php';
+require __DIR__ . '/app/admin_sync.php';
 
 portal_enforce_https();
 portal_enforce_canonical_application_path();
@@ -17,7 +18,7 @@ try { portal_start_session($config); $database = portal_open_existing_state_data
 catch (Throwable $e) { error_log('TWWATER SQLite initialization failed: '.$e->getMessage()); http_response_code(503); portal_render_page('系統暫時無法使用','<section class="panel narrow"><h1>系統暫時無法使用</h1><p>請稍後再試，或聯絡系統管理者。</p></section>'); exit; }
 
 $action = (string) ($_GET['action'] ?? 'documents');
-$allowedActions = ['documents', 'login', 'google_login', 'google_callback', 'logout', 'view', 'download', 'inline', 'admin', 'admin_users', 'admin_library_health', 'admin_library_health_data', 'admin_audit', 'admin_account_create', 'admin_account_update', 'admin_account_confirm', 'admin_account_reset_password', 'change_password'];
+$allowedActions = ['documents', 'login', 'google_login', 'google_callback', 'logout', 'view', 'download', 'inline', 'admin', 'admin_users', 'admin_library_health', 'admin_library_health_data', 'admin_audit', 'admin_sync', 'admin_sync_data', 'admin_sync_request', 'admin_sync_confirm', 'admin_sync_cancel', 'admin_account_create', 'admin_account_update', 'admin_account_confirm', 'admin_account_reset_password', 'change_password'];
 if (!in_array($action, $allowedActions, true)) $action = 'documents';
 try {
     if ($action === 'login') { portal_handle_login($database, $config); exit; }
@@ -32,6 +33,11 @@ try {
     if ($action === 'admin_library_health') { portal_render_admin_library_health_page(portal_require_admin($database)); exit; }
     if ($action === 'admin_library_health_data') { portal_handle_admin_library_health_data(portal_require_admin($database)); exit; }
     if ($action === 'admin_audit') { portal_render_admin_audit_page(portal_require_admin($database), $database); exit; }
+    if ($action === 'admin_sync') { portal_render_admin_sync_page(portal_require_admin($database), $database); exit; }
+    if ($action === 'admin_sync_data') { portal_handle_admin_sync_data(portal_require_admin($database)); exit; }
+    if ($action === 'admin_sync_request') { portal_handle_admin_sync_request($database, portal_require_admin($database)); exit; }
+    if ($action === 'admin_sync_confirm') { portal_handle_admin_sync_confirm($database, portal_require_admin($database)); exit; }
+    if ($action === 'admin_sync_cancel') { portal_handle_admin_sync_cancel($database, portal_require_admin($database)); exit; }
     if ($action === 'admin_account_create') { portal_handle_admin_account_create($database, portal_require_admin($database)); exit; }
     if ($action === 'admin_account_update') { portal_handle_admin_account_update($database, portal_require_admin($database)); exit; }
     if ($action === 'admin_account_confirm') { portal_handle_admin_account_confirmation($database, portal_require_admin($database)); exit; }
